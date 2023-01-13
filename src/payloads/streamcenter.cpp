@@ -37,7 +37,7 @@ RtmpStream* StreamCenter::creatStream(const typeString& key) {
 
 Void StreamCenter::delStream(const typeString& key) {
     RtmpStream* stream = NULL;
-    typeMapStreamItrConst itr;
+    typeMapStreamItr itr;
 
     itr = m_map.find(key);
     if (m_map.end() != itr) {
@@ -287,7 +287,7 @@ RtmpUint* StreamCenter::findPlayer(RtmpStream* stream, Uint32 id) {
 }
 
 Bool StreamCenter::delPlayer(RtmpStream* stream, Uint32 id) {
-    typeMapUnitItrConst itr;
+    typeMapUnitItr itr;
 
     itr = stream->m_players.find(id);
     if (stream->m_players.end() != itr) {
