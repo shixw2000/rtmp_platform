@@ -1062,21 +1062,48 @@ Int32 RtmpHandler::dealFlvData(RtmpNode* node, Rtmp* rtmp,
     Int32 msg_type, CacheHdr* hdr) {
     Int32 ret = 0;
     Cache* cache = NULL;
+    Byte* data = NULL;
+    RtmpPkg* pkg = NULL;
     RtmpUint* unit = rtmp->m_unit;
-    
+
     cache = CacheCenter::getCache(hdr); 
+    pkg = MsgCenter::cast<RtmpPkg>(cache);
+    data = pkg->m_payload + pkg->m_skip; 
     
     if (unit->m_is_publisher) {
         
-        /* cache some data */
+        /* publisher cache some data */
         cacheAvc(unit->m_ctx, msg_type, cache);
 
-        if (!unit->m_is_pause) {
+        if (!unit->m_blocked) {
             m_stream_center->publish(unit->m_ctx, msg_type, cache); 
         }
     } else {
-        if (!unit->m_is_pause) {
-            ret = sendRtmpPkg(node, unit->m_stream_id, cache); 
+        /* players, and is not blocked */
+        if (!unit->m_blocked) {
+            if (!unit->m_is_pause) {
+                /* normal status to play, */
+                ret = sendRtmpPkg(node, unit->m_stream_id, cache); 
+            } else {
+                /* pause status, try to find key frame, then block */
+                if (ENUM_MSG_RTMP_TYPE_VIDEO == msg_type
+                    && m_stream_center->chkVideoKeyFrame(data)) {
+                    unit->m_blocked = TRUE;
+                } else {
+                    ret = sendRtmpPkg(node, unit->m_stream_id, cache);
+                }
+            }
+        } else {
+            /* be in blocked status, and pressed unpause */
+            if (!unit->m_is_pause) {
+                /* try to find the first key frame, then unblock msgs */
+                if (ENUM_MSG_RTMP_TYPE_VIDEO == msg_type
+                    && m_stream_center->chkVideoKeyFrame(data)) {
+                    unit->m_blocked = FALSE;
+
+                    ret = sendRtmpPkg(node, unit->m_stream_id, cache);
+                }
+            }
         }
     } 
 

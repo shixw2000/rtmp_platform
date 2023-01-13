@@ -27,7 +27,8 @@ struct RtmpUint {
     Uint32 m_stream_id;
     Uint32 m_max_out_epoch;     // max epoch of this rtmp
     Uint32 m_base_out_ts; // max offset of this rtmp
-    Bool  m_is_pause; 
+    Bool m_blocked;
+    Bool m_is_pause; 
     Bool m_is_publisher;
     
     Chunk m_app;
