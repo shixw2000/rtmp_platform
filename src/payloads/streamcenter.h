@@ -86,6 +86,7 @@ public:
     Void notifyEnd(RtmpStream* stream);
     
     Void publish(RtmpStream* stream, Int32 msg_type, Cache* cache);
+    Void play(RtmpUint* unit, Int32 msg_type, Cache* cache);
 
     Bool regPlayer(RtmpUint* unit);
     Bool regPublisher(RtmpUint* unit);

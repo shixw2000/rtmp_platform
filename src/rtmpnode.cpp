@@ -370,9 +370,9 @@ METHOD(RtmpNode, sendPayload, Int32, RtmpNodePriv* _this, Uint32 epoch,
         } 
     }
 
-    LOG_INFO("send_payload| ret=%d| epoch=%u| rtmp_type=%u|"
+    LOG_INFO("send_payload| ret=%d| fd=%d| epoch=%u| rtmp_type=%u|"
         " payload_size=%d| stream_id=%u| chunk_size_out=%d|",
-        ret, epoch, rtmp_type, 
+        ret, rtmp->m_fd, epoch, rtmp_type, 
         payload_size, stream_id,
         rtmp->m_chunkSizeOut);
     return ret;
@@ -439,11 +439,12 @@ METHOD(RtmpNode, sendPkg, Int32, RtmpNodePriv* _this,
         hdr_size = 1;
     } while (total < pkg->m_size && 0 == ret);
 
-    LOG_INFO("send_pkg| ret=%d| cid=%u| fmt=%u| epoch=%u| timestamp=%u|"
+    LOG_INFO("send_pkg| ret=%d| fd=%d| cid=%u| fmt=%u|"
+        " epoch=%u| timestamp=%u|"
         " rtmp_type=%u| payload_size=%u|"
         " stream_id=%u| pkg_stream_id=%u|"
         " chunk_size_out=%d|",
-        ret,
+        ret, rtmp->m_fd, 
         header.m_cid,
         header.m_fmt,
 

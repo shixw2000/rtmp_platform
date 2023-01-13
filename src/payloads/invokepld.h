@@ -37,15 +37,17 @@ public:
     Void cacheAvc(RtmpStream* stream, Int32 msg_type, Cache* cache);
 
     Void closeRtmp(RtmpNode* node, Rtmp* rtmp);
+
+    Int32 sendCmd(RtmpNode* node, Uint32 stream_id,
+        Uint32 rtmp_type, const Chunk* chunk);
     
     Int32 sendRtmpPkg(RtmpNode* node, Uint32 stream_id, Cache* cache);
-    
-    Int32 sendAmfObj(const Char* promt, RtmpNode* node, Uint32 epoch, 
-        Uint32 stream_id, Uint32 rtmp_type, AMFObject* obj);
-    
+        
     Int32 sendStatus(RtmpNode* node, const Chunk* status, 
         const Chunk* detail);
     
+    /* attention: if the type input is obj, then it will be release by this function,
+        * and, it must not be reused ****/
     Int32 sendCall(RtmpNode* node, const Chunk* call,
         const double* txn, AMFObject* info, 
         AMFDataType arg_type, const Void* arg);
@@ -72,6 +74,9 @@ public:
     Int32 dealNotifyEndStream(RtmpNode* , Rtmp* rtmp, CacheHdr* hdr);
 
 private:
+    Int32 sendAmfObj(const Char* promt, RtmpNode* node, Uint32 epoch, 
+        Uint32 stream_id, Uint32 rtmp_type, AMFObject* obj);
+    
     Int32 dealConn(RtmpNode* node, Rtmp* rtmp, AMFObject* obj);
     Int32 dealPlay(RtmpNode* node, Rtmp* rtmp, AMFObject* obj);
     Int32 dealPause(RtmpNode* node, Rtmp* rtmp, AMFObject* obj);
@@ -79,6 +84,12 @@ private:
     Int32 dealUnpublish(RtmpNode* node, Rtmp* rtmp, AMFObject* obj);
     Int32 dealDelStream(RtmpNode* node, Rtmp* rtmp, AMFObject* obj);
     Int32 dealCreatStream(RtmpNode* node, Rtmp* rtmp, AMFObject* obj); 
+
+    Void updateOutTs(RtmpUint* unit);
+
+private:
+    /* test for player notify publisher */
+    Void notifyPublisher(RtmpUint* player, AMFObject* obj);
     
 private:
     HandShake* m_handshake;

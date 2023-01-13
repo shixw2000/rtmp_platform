@@ -55,6 +55,14 @@ Void RtmpHandler::free(RtmpHandler* hd) {
     }
 }
 
+Int32 RtmpHandler::sendCmd(RtmpNode* node, Uint32 stream_id,
+    Uint32 rtmp_type, const Chunk* chunk) {
+    Int32 ret = 0;
+
+    ret = node->sendPayload(node, 0, stream_id, rtmp_type, chunk);
+    return ret;
+}
+
 Int32 RtmpHandler::sendChunkSize(RtmpNode* node, Rtmp* rtmp,
     Uint32 chunkSize) {
     Int32 ret = 0;
@@ -66,7 +74,7 @@ Int32 RtmpHandler::sendChunkSize(RtmpNode* node, Rtmp* rtmp,
     chunk.m_size = builder.used();
     chunk.m_data = buff;
 
-    ret = node->sendPayload(node, 0, 0, RTMP_MSG_TYPE_CHUNK_SIZE, &chunk);
+    ret = sendCmd(node, 0, RTMP_MSG_TYPE_CHUNK_SIZE, &chunk);
     if (0 == ret) { 
         LOG_INFO("send_chunk_size| chunk_size_out=%u|"
             " msg=send amf ok|", chunkSize);
@@ -93,7 +101,7 @@ Int32 RtmpHandler::sendBytesReport(RtmpNode* node, Rtmp*,
     chunk.m_size = builder.used();
     chunk.m_data = buff;
     
-    ret = node->sendPayload(node, 0, 0, RTMP_MSG_TYPE_BYTES_READ_REPORT, &chunk);
+    ret = sendCmd(node, 0, RTMP_MSG_TYPE_BYTES_READ_REPORT, &chunk);
     if (0 == ret) { 
         LOG_INFO("send_bytes_report| ack_rcv_bytes=%u| msg=send amf ok|", 
             seqBytes); 
@@ -116,7 +124,7 @@ Int32 RtmpHandler::sendServBw(RtmpNode* node, Rtmp* rtmp, Uint32 bw) {
     chunk.m_size = builder.used();
     chunk.m_data = buff; 
 
-    ret = node->sendPayload(node, 0, 0, RTMP_MSG_TYPE_SERVER_BW, &chunk);
+    ret = sendCmd(node, 0, RTMP_MSG_TYPE_SERVER_BW, &chunk);
     if (0 == ret) { 
         LOG_INFO("send_serv_bw| snd_window_size=%u| msg=send amf ok|", bw);
         
@@ -143,7 +151,7 @@ Int32 RtmpHandler::sendCliBw(RtmpNode* node, Rtmp* rtmp,
     chunk.m_size = builder.used();
     chunk.m_data = buff; 
 
-    ret = node->sendPayload(node, 0, 0, RTMP_MSG_TYPE_CLIENT_BW, &chunk); 
+    ret = sendCmd(node, 0, RTMP_MSG_TYPE_CLIENT_BW, &chunk); 
     if (0 == ret) { 
         LOG_INFO("send_cli_bw| size=%u| limit=%u| msg=send amf ok|", 
             bw, ch);
@@ -176,7 +184,7 @@ Int32 RtmpHandler::sendUsrCtrl(RtmpNode* node, Uint16 ev,
     chunk.m_size = builder.used();
     chunk.m_data = buff; 
 
-    ret = node->sendPayload(node, 0, 0, RTMP_MSG_TYPE_USR_CTRL_MSG, &chunk); 
+    ret = sendCmd(node, 0, RTMP_MSG_TYPE_USR_CTRL_MSG, &chunk); 
     if (0 == ret) { 
         LOG_INFO("send_usr_ctrl| ev=%u| data=%u| extra=%u| msg=send amf ok|", 
             ev, p1, p2);
@@ -212,7 +220,6 @@ Int32 RtmpHandler::sendAmfObj(const Char* promt, RtmpNode* node,
         ret = -1;
     } 
 
-    m_amf->resetObj(obj); 
     return ret;
 }
 
@@ -266,6 +273,7 @@ Int32 RtmpHandler::sendCall(RtmpNode* node, const Chunk* call,
             !!info, arg_type);
     }
 
+    m_amf->resetObj(&obj); 
     return ret;
 }
 
@@ -752,6 +760,20 @@ Int32 RtmpHandler::dealPlay(RtmpNode* node, Rtmp* rtmp, AMFObject* obj) {
     return ret;
 }
 
+Void RtmpHandler::notifyPublisher(RtmpUint* player, AMFObject* obj) {
+    RtmpUint* publisher = NULL;
+    
+    if (!player->m_is_publisher && NULL != player->m_ctx) {
+        publisher = player->m_ctx->m_publisher;
+
+        if (NULL != publisher) { 
+            sendAmfObj("test_pause", publisher->m_entity, 
+                0, publisher->m_stream_id, 
+                RTMP_MSG_TYPE_INVOKE, obj);
+        }
+    }
+}
+
 Int32 RtmpHandler::dealPause(RtmpNode* node, Rtmp* rtmp, AMFObject* obj) {
     Int32 ret = 0;
     double* txn = NULL;
@@ -767,8 +789,8 @@ Int32 RtmpHandler::dealPause(RtmpNode* node, Rtmp* rtmp, AMFObject* obj) {
             ret = -1;
             break;
         }
-        
-        if (rtmp->m_unit->m_is_pause) {
+
+        if (rtmp->m_unit->m_is_pause) {            
             ret = sendStatus(node, &av_netstream_pause_notify, 
                 &rtmp->m_unit->m_stream_name); 
             
@@ -783,24 +805,10 @@ Int32 RtmpHandler::dealPause(RtmpNode* node, Rtmp* rtmp, AMFObject* obj) {
 
             m_stream_center->playCache(rtmp->m_unit);
         }
-
-        if (0 != ret) {
-            break;
-        }
-        
-        LOG_INFO("deal_pause| txn=%.2f| stream_id=%u| pause_val=%d|"
-            " stream_name=%.*s| user_id=%u| msg=ok|", 
-            *txn, rtmp->m_unit->m_stream_id,
-            rtmp->m_unit->m_is_pause,
-            rtmp->m_unit->m_stream_name.m_size,
-            rtmp->m_unit->m_stream_name.m_data,
-            rtmp->m_unit->m_user_id);
-
-        return 0;
     } while (0);
 
-    LOG_ERROR("deal_pause| ret=%d| txn=%.2f| stream_id=%u|"
-        " stream_name=%.*s| user_id=%u| msg=error|", 
+    LOG_INFO("deal_pause| ret=%d| txn=%.2f| stream_id=%u|"
+        " stream_name=%.*s| user_id=%u|", 
         ret, *txn, rtmp->m_unit->m_stream_id,
         rtmp->m_unit->m_stream_name.m_size,
         rtmp->m_unit->m_stream_name.m_data,
@@ -1091,6 +1099,12 @@ Void RtmpHandler::closeRtmp(RtmpNode*, Rtmp* rtmp) {
     }
 }
 
+Void RtmpHandler::updateOutTs(RtmpUint* unit) {
+    if (unit->m_base_out_ts < unit->m_max_out_epoch) {
+        unit->m_base_out_ts = unit->m_max_out_epoch;
+    }
+}
+
 Int32 RtmpHandler::dealNotifyEndStream(RtmpNode* ,
     Rtmp* rtmp, CacheHdr* hdr) {
     Int32 ret = 0;
@@ -1100,9 +1114,7 @@ Int32 RtmpHandler::dealNotifyEndStream(RtmpNode* ,
     req_id = (Uint32)MsgCenter::getExchMsgVal(hdr);
 
     /* when a stream ends, then the players base this epoch */
-    if (unit->m_base_out_ts < unit->m_max_out_epoch) {
-        unit->m_base_out_ts = unit->m_max_out_epoch;
-    }
+    updateOutTs(unit);
 
     LOG_INFO("deal_notify_end| stream_id=%u| self_id=%u|"
         " base_out_ts=%u|",

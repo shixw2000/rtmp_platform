@@ -111,20 +111,17 @@ Void StreamCenter::playCache(RtmpUint* unit) {
     RtmpStream* stream = unit->m_ctx;
 
     if (NULL != stream->m_avc_cache[ENUM_AVC_META_DATA]) {
-        unit->m_entity->onRecv(unit->m_entity, 
-            ENUM_MSG_RTMP_TYPE_META_INFO,
+        play(unit, ENUM_MSG_RTMP_TYPE_META_INFO, 
             stream->m_avc_cache[ENUM_AVC_META_DATA]);
     }
 
     if (NULL != stream->m_avc_cache[ENUM_AVC_VEDIO]) {
-        unit->m_entity->onRecv(unit->m_entity, 
-            ENUM_MSG_RTMP_TYPE_VIDEO,
+        play(unit, ENUM_MSG_RTMP_TYPE_VIDEO,
             stream->m_avc_cache[ENUM_AVC_VEDIO]);
     }
 
     if (NULL != stream->m_avc_cache[ENUM_AVC_AUDIO]) {
-        unit->m_entity->onRecv(unit->m_entity, 
-            ENUM_MSG_RTMP_TYPE_AUDIO,
+        play(unit, ENUM_MSG_RTMP_TYPE_AUDIO,
             stream->m_avc_cache[ENUM_AVC_AUDIO]);
     }
 }
@@ -154,8 +151,12 @@ Void StreamCenter::publish(RtmpStream* stream, Int32 msg_type, Cache* cache) {
     for (itr=units.begin(); itr != units.end(); ++itr) {
         unit = itr->second;
 
-        unit->m_entity->onRecv(unit->m_entity, msg_type, cache);
+        play(unit, msg_type, cache);
     }
+}
+
+Void StreamCenter::play(RtmpUint* unit, Int32 msg_type, Cache* cache) {
+    unit->m_entity->onRecv(unit->m_entity, msg_type, cache);
 }
 
 Bool StreamCenter::regPlayer(RtmpUint* unit) {
