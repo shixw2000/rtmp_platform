@@ -125,11 +125,10 @@ EnumSockRet ObjCenter::writeSock(NodeBase* node) {
     return ret;
 }
 
-Int32 ObjCenter::parseRtmp(RtmpNode* node, Rtmp* rtmp, 
-    Byte* data, Int32 len) {
+Int32 ObjCenter::parseRtmp(Rtmp* rtmp, Byte* data, Int32 len) {
     Int32 ret = 0;
 
-    ret = m_input->parseMsg(node, rtmp, data, len);
+    ret = m_input->parseMsg(rtmp, data, len);
     return ret;
 }
 

@@ -15,6 +15,7 @@ struct RtmpStream;
 class HandShake;
 class AmfPayload;
 class StreamCenter;
+class RtmpProto;
 
 class RtmpHandler {
     RtmpHandler();
@@ -27,74 +28,60 @@ public:
     static RtmpHandler* creat();
     static Void free(RtmpHandler* hd);
 
+    /* this function will allocat memory for key, and the user must release it later */
     static Bool genStreamKey(const Chunk* app,
         const Chunk* name, Chunk* key);
 
     static Bool chkFlvData(Uint32 msg_type);
 
-    Int32 dealCtrlMsg(RtmpNode* node, Rtmp* rtmp, Cache* cache);
-
-    Void cacheAvc(RtmpStream* stream, Int32 msg_type, Cache* cache);
-
-    Void closeRtmp(RtmpNode* node, Rtmp* rtmp);
-
-    Int32 sendCmd(RtmpNode* node, Uint32 stream_id,
-        Uint32 rtmp_type, const Chunk* chunk);
+    static Bool isAvcSid(Rtmp* rtmp, Uint32 sid); 
     
-    Int32 sendRtmpPkg(RtmpNode* node, Uint32 stream_id, Cache* cache);
-        
-    Int32 sendStatus(RtmpNode* node, const Chunk* status, 
-        const Chunk* detail);
+    Int32 dealRtmp(Rtmp* rtmp, CacheHdr* hdr);
+
+    Int32 dealCtrlMsg(Rtmp* rtmp, Cache* cache);
     
-    /* attention: if the type input is obj, then it will be release by this function,
-        * and, it must not be reused ****/
-    Int32 sendCall(RtmpNode* node, const Chunk* call,
-        const double* txn, AMFObject* info, 
-        AMFDataType arg_type, const Void* arg);
-
-    Int32 sendChunkSize(RtmpNode* node, Rtmp* rtmp, Uint32 chunkSize);
-    Int32 sendBytesReport(RtmpNode* node, Rtmp* rtmp, Uint32 seqBytes);
-    Int32 sendServBw(RtmpNode* node, Rtmp* rtmp, Uint32 bw);
-    Int32 sendCliBw(RtmpNode* node, Rtmp* rtmp, Uint32 bw, Int32 limit);
+    Int32 sendBytesReport(Rtmp* rtmp, Uint32 seqBytes);
     
-    Int32 sendUsrCtrl(RtmpNode* node, Uint16 ev, Uint32 p1, Uint32 p2);
-  
-    Int32 dealRtmp(RtmpNode* node, Rtmp* rtmp, CacheHdr* hdr);
+    Void closeRtmp(Rtmp* rtmp); 
 
-    Int32 dealHandshakeC01(RtmpNode* node, Rtmp* rtmp, CacheHdr* hdr);
+    Int32 dealHandshakeC01(Rtmp* rtmp, CacheHdr* hdr);
+    Int32 dealHandshakeC2(Rtmp* rtmp, CacheHdr* hdr);
 
-    Int32 dealHandshakeC2(RtmpNode* node, Rtmp* rtmp, CacheHdr* hdr);
+    Int32 dealInvoke(Rtmp* rtmp, CacheHdr* hdr);
 
-    Int32 dealInvoke(RtmpNode* node, Rtmp* rtmp, CacheHdr* hdr);
+    Int32 dealMetaData(Rtmp* rtmp, CacheHdr* hdr);
 
-    Int32 dealMetaData(RtmpNode* node, Rtmp* rtmp, CacheHdr* hdr);
-
-    Int32 dealFlvData(RtmpNode* , Rtmp* , Int32 , CacheHdr* hdr);
-
-    Int32 dealNotifyEndStream(RtmpNode* , Rtmp* rtmp, CacheHdr* hdr);
+    Int32 dealFlvData(Rtmp* rtmp, CacheHdr* hdr); 
 
 private:
-    Int32 sendAmfObj(const Char* promt, RtmpNode* node, Uint32 epoch, 
-        Uint32 stream_id, Uint32 rtmp_type, AMFObject* obj);
+    Int32 dealConn(Rtmp* rtmp, AMFObject* obj);
     
-    Int32 dealConn(RtmpNode* node, Rtmp* rtmp, AMFObject* obj);
-    Int32 dealPlay(RtmpNode* node, Rtmp* rtmp, AMFObject* obj);
-    Int32 dealPause(RtmpNode* node, Rtmp* rtmp, AMFObject* obj);
-    Int32 dealPublish(RtmpNode* node, Rtmp* rtmp, AMFObject* obj);
-    Int32 dealUnpublish(RtmpNode* node, Rtmp* rtmp, AMFObject* obj);
-    Int32 dealDelStream(RtmpNode* node, Rtmp* rtmp, AMFObject* obj);
-    Int32 dealCreatStream(RtmpNode* node, Rtmp* rtmp, AMFObject* obj); 
+    Int32 dealPlay(Rtmp* rtmp, Uint32 sid, Uint32 pkg_sid, AMFObject* obj);
+    Int32 dealPause(Rtmp* rtmp, Uint32 sid, Uint32 pkg_sid, AMFObject* obj);
+    Int32 dealPublish(Rtmp* rtmp, Uint32 sid, Uint32 pkg_sid, AMFObject* obj);
+    
+    Int32 dealFCPublish(Rtmp* rtmp, Uint32 sid, Uint32 pkg_sid, AMFObject* obj);
+    Int32 dealFCUnpublish(Rtmp* rtmp, Uint32 sid, Uint32 pkg_sid, AMFObject* obj);
+    
+    Int32 dealDelStream(Rtmp* rtmp, Uint32 sid, Uint32 pkg_sid, AMFObject* obj);
+    Int32 dealReleaseStream(Rtmp* rtmp, Uint32 sid, Uint32 pkg_sid, AMFObject* obj);
+    
+    Int32 dealCreatStream(Rtmp* rtmp, AMFObject* obj); 
 
-    Void updateOutTs(RtmpUint* unit);
+    Int32 publish(RtmpUint* unit, Cache* cache);
+    Int32 play(RtmpUint* unit, Cache* cache); 
+
+    RtmpStream* findStream(Rtmp* rtmp, const Chunk* name);
 
 private:
-    /* test for player notify publisher */
-    Void notifyPublisher(RtmpUint* player, AMFObject* obj);
+    Uint32 nextSid(Rtmp* rtmp);
     
 private:
+    Uint32 m_user_id;
     HandShake* m_handshake;
     AmfPayload* m_amf;
     StreamCenter* m_stream_center;
+    RtmpProto* m_proto_center;
 };
 
 

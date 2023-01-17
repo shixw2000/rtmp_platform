@@ -14,7 +14,6 @@ public:
     static void free(CacheHdr* hdr); 
 
     static Int32 getType(CacheHdr* hdr); 
-    static Void setType(CacheHdr* hdr, Int32 type); 
     
     static Byte* buffer(CacheHdr* hdr);
     

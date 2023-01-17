@@ -103,23 +103,31 @@ STRAVC(status_level_err, "error");
 STRAVC(status_conn_ok, "NetConnection.Connect.Success");
 STRAVC(status_conn_des, "Connection succeeded.");
 STRAVC(status_conn_reject, "NetConnection.Connect.Rejected");
-STRAVC(status_play_reset, "NetStream.Play.Reset");
-STRAVC(status_play_reset_des, "Reset playing");
-STRAVC(status_play_start, "NetStream.Play.Start");
-STRAVC(status_play_start_des, "Started playing");
+
 STRAVC(fms_version, "version");
 STRAVC(fms_data, "data");
 STRAVC(def_fms_version, "3,5,1,525");
 STRAVC(def_clientid, "ASAICiss");
+
+STRAVC(status_play_reset, "NetStream.Play.Reset");
+STRAVC(status_play_start, "NetStream.Play.Start");
+STRAVC(status_play_stop, "NetStream.Play.Stop");
+STRAVC(status_play_end, "NetStream.Play.Complete");
 STRAVC(netstream_pause_notify, "NetStream.Pause.Notify");
-STRAVC(netstream_pause_notify_des, "Paused stream.");
 STRAVC(netstream_unpause_notify, "NetStream.Unpause.Notify");
-STRAVC(netstream_unpause_notify_des, "Unpaused stream.");
 STRAVC(netstream_publish_start, "NetStream.Publish.Start");
-STRAVC(netstream_publish_start_des, "Started publishing stream.");
-STRAVC(status_ok_des, "NetStream is publishing.");
+STRAVC(netstream_publish_notify, "NetStream.Play.PublishNotify");
+STRAVC(netstream_unpublish_notify, "NetStream.Play.UnpublishNotify");
 STRAVC(meta_prefix_data, "@setDataFrame");
 
+
+static const Char RTMP_STREAM_START_DESC[] = "NetStream is now started";
+static const Char RTMP_STREAM_STOP_DESC[] = "NetStream is now stoped";
+static const Char RTMP_STREAM_END_DESC[] = "NetStream is now completed";
+static const Char RTMP_STREAM_PAUSE_DESC[] = "NetStream is now paused";
+static const Char RTMP_STREAM_UNPAUSE_DESC[] = "NetStream is now unpaused";
+static const Char RTMP_STREAM_PUBLISH_DESC[] = "NetStream is now published";
+static const Char RTMP_STREAM_UNPUBLISH_DESC[] = "NetStream is now unpublished";
 
 extern Bool matchAV(const Chunk* o1, const Chunk* o2);
 extern Bool creatAV(const Chunk* src, Chunk* dst);
@@ -160,7 +168,7 @@ public:
     Void addPropAny(AMFObject* obj, const Chunk* name,
         AMFDataType type, const Void* any);
 
-    Bool delPropByIndex(AMFObject* obj, Int32 index);
+    Bool delProp(AMFObject* obj, Int32 index);
     
     inline Int32 countProp(AMFObject* obj) {
         return obj->m_num;
@@ -187,8 +195,14 @@ public:
     Int32* findPropBool(AMFObject* obj, const Chunk* name);
     AMFObject* findPropObj(AMFObject* obj, const Chunk* name);
 
+    /* just free the current level properties */
     Void resetObj(AMFObject* obj);
-    Void resetProp(AMFObjectProperty* prop);
+
+    /* recursively free the whole properties of obj */
+    Void freeObj(AMFObject* obj);
+
+    /* recursively free the whole property if type is obj */
+    Void freeProp(AMFObjectProperty* prop);
 
     Int32 peekString(Byte* data, Int32 len, Chunk* chunk);
 

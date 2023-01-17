@@ -6,12 +6,18 @@
 #include"handshake.h"
 #include"msgtype.h"
 #include"streamcenter.h"
+#include"rtmpproto.h"
 
+
+#define F_PTR_VAL(f) (f ? *f : 0)
 
 RtmpHandler::RtmpHandler() {
     m_handshake = NULL;
     m_amf = NULL;
     m_stream_center = NULL;
+    m_proto_center = NULL;
+
+    m_user_id = 100;
 }
 
 RtmpHandler::~RtmpHandler() {
@@ -20,7 +26,8 @@ RtmpHandler::~RtmpHandler() {
 Int32 RtmpHandler::init() {
     I_NEW(HandShake, m_handshake);
     I_NEW(AmfPayload, m_amf);
-    I_NEW(StreamCenter, m_stream_center);
+    I_NEW_P(RtmpProto, m_proto_center, m_amf);
+    I_NEW_P(StreamCenter, m_stream_center, m_proto_center); 
 
     return 0;
 }
@@ -28,6 +35,7 @@ Int32 RtmpHandler::init() {
 Void RtmpHandler::finish() {
     I_FREE(m_handshake);
     I_FREE(m_amf);
+    I_FREE(m_proto_center);
     I_FREE(m_stream_center);
 }
 
@@ -55,234 +63,11 @@ Void RtmpHandler::free(RtmpHandler* hd) {
     }
 }
 
-Int32 RtmpHandler::sendCmd(RtmpNode* node, Uint32 stream_id,
-    Uint32 rtmp_type, const Chunk* chunk) {
-    Int32 ret = 0;
-
-    ret = node->sendPayload(node, 0, stream_id, rtmp_type, chunk);
-    return ret;
-}
-
-Int32 RtmpHandler::sendChunkSize(RtmpNode* node, Rtmp* rtmp,
-    Uint32 chunkSize) {
-    Int32 ret = 0;
-    Byte buff[RTMP_MIN_CHUNK_SIZE] = {0};
-    Chunk chunk = {buff, RTMP_MIN_CHUNK_SIZE};
-    Builder builder(&chunk); 
-    
-    builder.build32(&chunkSize);
-    chunk.m_size = builder.used();
-    chunk.m_data = buff;
-
-    ret = sendCmd(node, 0, RTMP_MSG_TYPE_CHUNK_SIZE, &chunk);
-    if (0 == ret) { 
-        LOG_INFO("send_chunk_size| chunk_size_out=%u|"
-            " msg=send amf ok|", chunkSize);
-        
-        /* update out chunk size */
-        rtmp->m_chunkSizeOut = chunkSize;
-    } else {
-        LOG_ERROR("send_chunk_size| chunk_size_out=%u|"
-            " msg=send amf error|", chunkSize);
-    }
-
-    return ret;
-}
-
-Int32 RtmpHandler::sendBytesReport(RtmpNode* node, Rtmp*,
-    Uint32 seqBytes) {
-    Int32 ret = 0;
-    Byte buff[RTMP_MIN_CHUNK_SIZE] = {0};
-    Chunk chunk = {buff, RTMP_MIN_CHUNK_SIZE};
-    Builder builder(&chunk); 
-
-    builder.build32(&seqBytes);
-
-    chunk.m_size = builder.used();
-    chunk.m_data = buff;
-    
-    ret = sendCmd(node, 0, RTMP_MSG_TYPE_BYTES_READ_REPORT, &chunk);
-    if (0 == ret) { 
-        LOG_INFO("send_bytes_report| ack_rcv_bytes=%u| msg=send amf ok|", 
-            seqBytes); 
-    } else {
-        LOG_ERROR("send_bytes_report| ack_rcv_bytes=%u| msg=send amf error|", 
-            seqBytes);
-    }
-  
-    return ret;
-}
-
-Int32 RtmpHandler::sendServBw(RtmpNode* node, Rtmp* rtmp, Uint32 bw) {
-    Int32 ret = 0;
-    Byte buff[RTMP_MIN_CHUNK_SIZE] = {0};
-    Chunk chunk = {buff, RTMP_MIN_CHUNK_SIZE};
-    Builder builder(&chunk); 
-
-    builder.build32(&bw);
-
-    chunk.m_size = builder.used();
-    chunk.m_data = buff; 
-
-    ret = sendCmd(node, 0, RTMP_MSG_TYPE_SERVER_BW, &chunk);
-    if (0 == ret) { 
-        LOG_INFO("send_serv_bw| snd_window_size=%u| msg=send amf ok|", bw);
-        
-        /* update send window size */
-        rtmp->m_srv_window_size = bw;
-    } else {
-        LOG_ERROR("send_serv_bw| snd_window_size=%u| msg=send amf error|", bw);
-    }
-
-    return ret;
-}
-
-Int32 RtmpHandler::sendCliBw(RtmpNode* node, Rtmp* rtmp,
-    Uint32 bw, Int32 limit){
-    Int32 ret = 0;
-    Byte ch = (Byte)limit;
-    Byte buff[RTMP_MIN_CHUNK_SIZE] = {0};
-    Chunk chunk = {buff, RTMP_MIN_CHUNK_SIZE};
-    Builder builder(&chunk); 
-
-    builder.build32(&bw);
-    builder.build8(&ch);
-
-    chunk.m_size = builder.used();
-    chunk.m_data = buff; 
-
-    ret = sendCmd(node, 0, RTMP_MSG_TYPE_CLIENT_BW, &chunk); 
-    if (0 == ret) { 
-        LOG_INFO("send_cli_bw| size=%u| limit=%u| msg=send amf ok|", 
-            bw, ch);
-
-        rtmp->m_cli_window_size = bw;
-    } else {
-        LOG_ERROR("send_cli_bw| size=%u| limit=%u| msg=send amf error|",
-            bw, ch);
-    }
-    
-    return ret;
-}
-
-Int32 RtmpHandler::sendUsrCtrl(RtmpNode* node, Uint16 ev, 
-    Uint32 p1, Uint32 p2) {
-    Int32 ret = 0;
-    Byte buff[RTMP_MIN_CHUNK_SIZE] = {0};
-    Chunk chunk = {buff, RTMP_MIN_CHUNK_SIZE};
-    Builder builder(&chunk); 
-
-    if (0x3 == ev) { 
-        builder.build16(&ev);
-        builder.build32(&p1);
-        builder.build32(&p2);
-    } else { 
-        builder.build16(&ev);
-        builder.build32(&p1);
-    }
-
-    chunk.m_size = builder.used();
-    chunk.m_data = buff; 
-
-    ret = sendCmd(node, 0, RTMP_MSG_TYPE_USR_CTRL_MSG, &chunk); 
-    if (0 == ret) { 
-        LOG_INFO("send_usr_ctrl| ev=%u| data=%u| extra=%u| msg=send amf ok|", 
-            ev, p1, p2);
-    } else {
-        LOG_ERROR("send_usr_ctrl| ev=%u| data=%u| extra=%u| msg=send amf error|",
-            ev, p1, p2);
-    }
-    
-    return ret;
-}
-
-Int32 RtmpHandler::sendRtmpPkg(RtmpNode* node,
-    Uint32 stream_id, Cache* cache) {
-    Int32 ret = 0;
-
-    ret = node->sendPkg(node, stream_id, cache); 
-    return ret;
-}
-
-Int32 RtmpHandler::sendAmfObj(const Char* promt, RtmpNode* node, 
-    Uint32 epoch, Uint32 stream_id,
-    Uint32 rtmp_type, AMFObject* obj) {
-    Int32 ret = 0;
-    Bool bOk = FALSE;
-    Chunk chunk = AMF_CHUNK_EMPTY;
-
-    m_amf->dump(promt, obj);
-    
-    bOk = m_amf->encode(obj, &chunk);
-    if (bOk) {
-        ret = node->sendPayload(node, epoch, stream_id, rtmp_type, &chunk); 
-    } else {
-        ret = -1;
-    } 
-
-    return ret;
-}
-
-Int32 RtmpHandler::sendStatus(RtmpNode* node, const Chunk* status, 
-    const Chunk* detail) {
-    Int32 ret = 0;
-    AMFObject arg = AMF_OBJ_INVALID;
-
-    m_amf->addPropAny(&arg, &av_level, AMF_STRING, &av_status_level_ok);
-    m_amf->addPropAny(&arg, &av_code, AMF_STRING, status);
-    m_amf->addPropAny(&arg, &av_description, AMF_STRING, &av_status_ok_des);
-    m_amf->addPropAny(&arg, &av_details, AMF_STRING, detail);
-    m_amf->addPropAny(&arg, &av_clientid, AMF_STRING, &av_def_clientid);
-  
-    ret = sendCall(node, &av_onStatus, &AMF_ZERO_DOUBLE, 
-        NULL, AMF_OBJECT, &arg); 
-    return ret;
-}
-
-Int32 RtmpHandler::sendCall(RtmpNode* node, const Chunk* call, 
-    const double* txn, AMFObject* info, 
-    AMFDataType arg_type, const Void* arg) {
-    Int32 ret = 0;
-    AMFObject obj = AMF_OBJ_INVALID;
-
-    m_amf->addPropAny(&obj, NULL, AMF_STRING, call);
-    m_amf->addPropAny(&obj, NULL, AMF_NUMBER, txn);
-
-    if (NULL != info) {
-        m_amf->addPropAny(&obj, NULL, AMF_OBJECT, info);
-    } else {
-        m_amf->addPropAny(&obj, NULL, AMF_NULL, NULL); 
-    }
-
-    if (AMF_INVALID != arg_type) {
-        m_amf->addPropAny(&obj, NULL, arg_type, arg); 
-    } 
-    
-    ret = sendAmfObj("send_call", node, 0, 0, RTMP_MSG_TYPE_INVOKE, &obj);
-    if (0 == ret) {
-        LOG_DEBUG("send_call| call=%.*s| txn=%.2f|"
-            " has_info=%d| arg_type=0x%x|"
-            " msg=send amf ok|",
-            call->m_size, call->m_data, *txn,
-            !!info, arg_type);
-    } else {
-        LOG_ERROR("send_call| call=%.*s| txn=%.2f|"
-            " has_info=%d| arg_type=0x%x|"
-            " msg=send amf error|",
-            call->m_size, call->m_data, *txn,
-            !!info, arg_type);
-    }
-
-    m_amf->resetObj(&obj); 
-    return ret;
-}
-
-
-Int32 RtmpHandler::dealHandshakeC01(RtmpNode* node, Rtmp* rtmp,
-    CacheHdr* hdr) {
+Int32 RtmpHandler::dealHandshakeC01(Rtmp* rtmp, CacheHdr* hdr) {
     Int32 ret = 0;
     Cache* cache = NULL;
     CommPkg* pkg = NULL;
+    RtmpNode* node = rtmp->m_entity;
     RtmpHandshake* rtmpHandshake = &rtmp->m_chn.m_handshake;
 
     cache = CacheCenter::getCache(hdr);
@@ -294,7 +79,7 @@ Int32 RtmpHandler::dealHandshakeC01(RtmpNode* node, Rtmp* rtmp,
         m_handshake->creatS0S1(pkg->m_data, rtmpHandshake);
 
         /* send c01 and this cache is free by hdr in function end */
-        node->handshake(node, cache);
+        node->sendHandshake(node, cache);
         
         /* creat s2 */ 
         cache = MsgCenter::creatCache<CommPkg>(RTMP_SIG_SIZE);
@@ -304,7 +89,7 @@ Int32 RtmpHandler::dealHandshakeC01(RtmpNode* node, Rtmp* rtmp,
         m_handshake->creatS2(pkg->m_data, rtmpHandshake);
 
         /* send s2 */
-        node->handshake(node, cache);
+        node->sendHandshake(node, cache);
         
         /* release cache of s2 here */
         CacheCenter::del(cache);
@@ -319,8 +104,7 @@ Int32 RtmpHandler::dealHandshakeC01(RtmpNode* node, Rtmp* rtmp,
     return ret;
 }
 
-Int32 RtmpHandler::dealHandshakeC2(RtmpNode*, Rtmp* rtmp,
-    CacheHdr* hdr) {
+Int32 RtmpHandler::dealHandshakeC2(Rtmp* rtmp, CacheHdr* hdr) {
     Int32 ret = 0;
     Cache* cache = NULL;
     CommPkg* pkg = NULL;
@@ -343,7 +127,7 @@ Int32 RtmpHandler::dealHandshakeC2(RtmpNode*, Rtmp* rtmp,
     return ret;
 }
 
-Int32 RtmpHandler::dealCtrlMsg(RtmpNode*, Rtmp* rtmp, Cache* cache) {
+Int32 RtmpHandler::dealCtrlMsg(Rtmp* rtmp, Cache* cache) {
     Int32 ret = 0;
     Bool bOk = FALSE;
     Uint16 u16 = 0;
@@ -458,7 +242,7 @@ Int32 RtmpHandler::dealCtrlMsg(RtmpNode*, Rtmp* rtmp, Cache* cache) {
     return ret;
 }
 
-Int32 RtmpHandler::dealRtmp(RtmpNode* node, Rtmp* rtmp, CacheHdr* hdr) {
+Int32 RtmpHandler::dealRtmp(Rtmp* rtmp, CacheHdr* hdr) {
     Int32 ret = 0;
     Int32 type = 0;
 
@@ -466,27 +250,23 @@ Int32 RtmpHandler::dealRtmp(RtmpNode* node, Rtmp* rtmp, CacheHdr* hdr) {
     switch (type) {
     case ENUM_MSG_RTMP_TYPE_AUDIO:
     case ENUM_MSG_RTMP_TYPE_VIDEO:
-        ret = dealFlvData(node, rtmp, type, hdr);
+        ret = dealFlvData(rtmp, hdr);
         break;
 
     case ENUM_MSG_RTMP_TYPE_INVOKE:
-        ret = dealInvoke(node, rtmp, hdr);
+        ret = dealInvoke(rtmp, hdr);
         break;
 
     case ENUM_MSG_RTMP_TYPE_META_INFO:
-        ret = dealMetaData(node, rtmp, hdr);
+        ret = dealMetaData(rtmp, hdr);
         break; 
         
     case ENUM_MSG_RTMP_HANDSHAKE_C0C1:
-        ret = dealHandshakeC01(node, rtmp, hdr);
+        ret = dealHandshakeC01(rtmp, hdr);
         break;
     case ENUM_MSG_RTMP_HANDSHAKE_C2:
-        ret = dealHandshakeC2(node, rtmp, hdr);
+        ret = dealHandshakeC2(rtmp, hdr);
         break; 
-
-    case ENUM_MSG_CUSTOMER_NOTIFY_END_STREAM:
-        ret = dealNotifyEndStream(node, rtmp, hdr);
-        break;
     
     default:
         LOG_INFO("deal_rtmp| rtmp_type=%d| msg=type unknown|", type); 
@@ -498,19 +278,27 @@ Int32 RtmpHandler::dealRtmp(RtmpNode* node, Rtmp* rtmp, CacheHdr* hdr) {
     return ret;
 }
 
-Int32 RtmpHandler::dealInvoke(RtmpNode* node, Rtmp* rtmp, CacheHdr* hdr) {
+Int32 RtmpHandler::dealInvoke(Rtmp* rtmp, CacheHdr* hdr) {
     Int32 ret = 0;
+    Uint32 sid = RTMP_INVALID_SID;
+    Uint32 pkg_sid = RTMP_INVALID_SID;
     Bool bOk = FALSE;
-    AMFObject obj = AMF_OBJ_INVALID;
     Chunk* method = NULL;
     double* txn = NULL;
-    double f = 0.;
+    MsgComm* msg = NULL;
     Cache* cache = NULL;
     RtmpPkg* pkg = NULL;
+    AMFObject obj = AMF_OBJ_INVALID;
+
+    msg = MsgCenter::body<MsgComm>(hdr);
+    sid = msg->m_sid;   // this is the real used sid
     
     cache = CacheCenter::getCache(hdr);
     pkg = MsgCenter::cast<RtmpPkg>(cache);
 
+    /* original sid in the header */
+    pkg_sid = pkg->m_sid;
+    
     bOk = m_amf->decode(&obj, pkg->m_payload, pkg->m_size);
     if (bOk) {
         m_amf->dump("deal_invoke", &obj);
@@ -520,49 +308,55 @@ Int32 RtmpHandler::dealInvoke(RtmpNode* node, Rtmp* rtmp, CacheHdr* hdr) {
             txn = m_amf->indexPropNum(&obj, 1);
             
             if (matchAV(&av_connect, method)) {
-                ret = dealConn(node, rtmp, &obj);
+                ret = dealConn(rtmp, &obj);
             } else if (matchAV(&av_createStream, method)) {
-                ret = dealCreatStream(node, rtmp, &obj);
+                ret = dealCreatStream(rtmp, &obj);
             } else if (matchAV(&av_getStreamLength, method)) {
-                f = 10.;
-                ret = sendCall(node, &av__result, txn, NULL, AMF_NUMBER, &f);
+                ret = m_proto_center->sendResult(rtmp, RTMP_INVALID_SID, txn);
             } else if (matchAV(&av_play, method)) {
-                ret = dealPlay(node, rtmp, &obj);
-            } else if (matchAV(&av_FCPublish, method)) {                
-                ret = sendCall(node, &av_onFCPublish, &AMF_ZERO_DOUBLE,
-                    NULL, AMF_INVALID, NULL);
+                ret = dealPlay(rtmp, sid, pkg_sid, &obj);
             } else if (matchAV(&av_publish, method)) {
-                ret = dealPublish(node, rtmp, &obj);
+                ret = dealPublish(rtmp, sid, pkg_sid, &obj);
             } else if (matchAV(&av_pause, method)) {
-                ret = dealPause(node, rtmp, &obj);
-            } else if (matchAV(&av_deleteStream, method)) {
-                ret = dealDelStream(node, rtmp, &obj);
+                ret = dealPause(rtmp, sid, pkg_sid, &obj);
+            } else if (matchAV(&av_FCPublish, method)) {
+                ret = dealFCPublish(rtmp, sid, pkg_sid, &obj);
             } else if (matchAV(&av_FCUnpublish, method)) {
-                ret = dealUnpublish(node, rtmp, &obj);
-            } else if (matchAV(&av_closeStream, method)) {
-                ret = 0;
-            } else if (matchAV(&av_releaseStream, method)
-                || matchAV(&av__checkbw, method)) {
-                ret = sendCall(node, &av__result, txn, NULL, AMF_INVALID, NULL);
-            } else {
+                ret = dealFCUnpublish(rtmp, sid, pkg_sid, &obj);
+            } else if (matchAV(&av_deleteStream, method)) {
+                ret = dealDelStream(rtmp, sid, pkg_sid, &obj);
+            } else if (matchAV(&av_releaseStream, method)) {
+                ret = dealReleaseStream(rtmp, sid, pkg_sid, &obj);
+            } else if (matchAV(&av__checkbw, method)) {
+                ret = m_proto_center->sendResult(rtmp, RTMP_INVALID_SID, txn);
+            } else {                
+                LOG_INFO("deal_invoke| user_id=%u| sid=%u| pkg_sid=%u|"
+                    " method=%*.s| msg=ok|",
+                    rtmp->m_user_id, sid, pkg_sid,
+                    method->m_size, method->m_data);
+                    
                 ret = 0;
             }
         } else {
-            LOG_ERROR("deal_invoke| msg=method null error|");
+            LOG_ERROR("deal_invoke| user_id=%u| sid=%u| pkg_sid=%u|"
+                " msg=method null error|",
+                rtmp->m_user_id, sid, pkg_sid);
 
             ret = -1;
         }
     } else {
-        LOG_ERROR("deal_invoke| msg=decode error|");
+        LOG_ERROR("deal_invoke| user_id=%u| sid=%u| pkg_sid=%u|"
+            " msg=decode error|",
+            rtmp->m_user_id, sid, pkg_sid);
 
         ret = -1;
     }
 
-    m_amf->resetObj(&obj);
+    m_amf->freeObj(&obj);
     return ret;
 }
 
-Int32 RtmpHandler::dealConn(RtmpNode* node, Rtmp* rtmp, AMFObject* obj) {
+Int32 RtmpHandler::dealConn(Rtmp* rtmp, AMFObject* obj) {
     Int32 ret = 0;
     double f = 0.;
     double* txn = NULL;
@@ -570,15 +364,9 @@ Int32 RtmpHandler::dealConn(RtmpNode* node, Rtmp* rtmp, AMFObject* obj) {
     AMFObject* po = NULL;
     AMFObject infoObj = AMF_OBJ_INVALID;
     AMFObject argObj = AMF_OBJ_INVALID;
-    AMFObject extObj = AMF_OBJ_INVALID;
+    AMFObject extObj = AMF_OBJ_INVALID; // this is child of arg
 
-    do {
-        rtmp->m_unit = creatUnit(m_stream_center->genUserId(), node);
-        if (NULL == rtmp->m_unit) {
-            ret = -1;
-            break;
-        }
-
+    do { 
         txn = m_amf->indexPropNum(obj, 1); 
         po = m_amf->indexPropObj(obj, 2);
         if (NULL == po) {
@@ -588,24 +376,32 @@ Int32 RtmpHandler::dealConn(RtmpNode* node, Rtmp* rtmp, AMFObject* obj) {
     
         /* arguments */
         pv = m_amf->findPropString(po, &av_app);
-        if (NULL != pv) {
-            creatAV(pv, &rtmp->m_unit->m_app);
+        if (NULL != pv && 0 < pv->m_size) {
+            creatAV(pv, &rtmp->m_app);
         } else {
-            ret = -1;
+            ret = -2;
             break;
         } 
 
         pv = m_amf->findPropString(po, &av_tcUrl);
-        if (NULL != pv) {
-            creatAV(pv, &rtmp->m_unit->m_tcUrl);
+        if (NULL != pv && 0 < pv->m_size) {
+            creatAV(pv, &rtmp->m_tcUrl);
         } else {
-            ret = -1;
+            ret = -3;
             break;
         } 
+
+        if (ENUM_RTMP_STATUS_HANDSHAKE != rtmp->m_status) {
+            ret = -4;
+            break;
+        }
+
+        /* generate an unique user id */
+        rtmp->m_user_id = ++m_user_id;
             
         /* set bandwidth */
-        sendServBw(node, rtmp, RTMP_DEF_WIND_SIZE);
-        sendCliBw(node, rtmp, RTMP_DEF_WIND_SIZE, 2);
+        m_proto_center->sendServBw(rtmp, RTMP_DEF_WIND_SIZE);
+        m_proto_center->sendCliBw(rtmp, RTMP_DEF_WIND_SIZE, 2);
 
         m_amf->addPropAny(&infoObj, &av_fmsVer, AMF_STRING, &av_def_fmsVer);
 
@@ -619,59 +415,89 @@ Int32 RtmpHandler::dealConn(RtmpNode* node, Rtmp* rtmp, AMFObject* obj) {
         m_amf->addPropAny(&argObj, &av_code, AMF_STRING, &av_status_conn_ok);
         m_amf->addPropAny(&argObj, &av_description, AMF_STRING, &av_status_conn_des);
 
-        f = rtmp->m_unit->m_encoding;
+        f = rtmp->m_encoding;
         m_amf->addPropAny(&argObj, &av_objectEncoding, AMF_NUMBER, &f);
 
         m_amf->addPropAny(&extObj, &av_fms_version, AMF_STRING, &av_def_fms_version);
+        
         m_amf->addPropAny(&argObj, &av_fms_data, AMF_OBJECT, &extObj); 
 
-        ret = sendCall(node, &av__result, txn, &infoObj, AMF_OBJECT, &argObj); 
-        if (0 != ret) {
-            LOG_ERROR("****deal_conn| txn=%.2f| msg=send conn error|", *txn);
-            break;
-        } 
-
-        /* send call */
-        ret = sendCall(node, &av_onBWDone, &AMF_ZERO_DOUBLE, NULL, AMF_INVALID, NULL);
-        if (0 != ret) {
-            LOG_ERROR("****deal_conn| txn=%.2f| msg=send call error|", *txn);
-            break;
-        } 
-
-        rtmp->m_status = ENUM_RTMP_STATUS_CONNECTED;
-
-        LOG_INFO("deal_conn| txn=%.2f| msg=ok|", *txn);
+        m_proto_center->sendResult(rtmp, RTMP_INVALID_SID, txn,
+            &infoObj, AMF_OBJECT, &argObj); 
+        
+        m_proto_center->sendCall(rtmp, RTMP_INVALID_SID, &av_onBWDone, 
+            &AMF_ZERO_DOUBLE); 
+        
+        rtmp->m_status = ENUM_RTMP_STATUS_CONNECTED; 
     } while (0);
+
+    LOG_INFO("deal_conn| ret=%d| txn=%.2f| user_id=%u|"
+        " app=%.*s| tcUrl=%.*s|", 
+        ret, 
+        F_PTR_VAL(txn),
+        rtmp->m_user_id,
+        rtmp->m_app.m_size,
+        rtmp->m_app.m_data,
+        rtmp->m_tcUrl.m_size,
+        rtmp->m_tcUrl.m_data);
   
+    /* release objs */
+    m_amf->freeObj(&infoObj);
+    m_amf->freeObj(&argObj);
     return ret;
 }
 
-Int32 RtmpHandler::dealCreatStream(RtmpNode* node, 
-    Rtmp* rtmp, AMFObject* obj) {
+Uint32 RtmpHandler::nextSid(Rtmp* rtmp) {
+    Uint32 sid = 0;
+    
+    for (sid=1; sid<RTMP_MAX_SESS_CNT; ++sid) {
+        if (NULL == rtmp->m_unit[sid]) {
+            return sid;;
+        }
+    }
+
+    return RTMP_INVALID_SID;
+}
+
+Int32 RtmpHandler::dealCreatStream(Rtmp* rtmp, AMFObject* obj) {
     Int32 ret = 0;
+    Uint32 sid = 0;
     double f = 0.;
     double* txn = NULL;
 
     do {
         txn = m_amf->indexPropNum(obj, 1);
 
-        /* creat stream id */
-        f = ++rtmp->m_unit->m_stream_id;
+        if (ENUM_RTMP_STATUS_CONNECTED != rtmp->m_status) {
+            ret = -1;
+            break;
+        }
+
+        sid = nextSid(rtmp);
+        if (RTMP_INVALID_SID != sid) {
+            rtmp->m_unit[sid] = StreamCenter::creatUnit(sid, rtmp);
+        } else {
+            /* no more sid */
+            ret = -2;
+            break;
+        }
         
         /* set larger chunk */
-        sendChunkSize(node, rtmp, RTMP_DEF_CHUNK_SIZE); 
+        m_proto_center->sendChunkSize(rtmp, RTMP_DEF_CHUNK_SIZE); 
         
-        ret = sendCall(node, &av__result, txn, NULL, AMF_NUMBER, &f); 
-        if (0 != ret) {
-            break;
-        } 
-        
-        rtmp->m_status = ENUM_RTMP_STATUS_CREATED_STREAM;
+        f = sid;
+        m_proto_center->sendResult(rtmp, RTMP_INVALID_SID, txn,
+            NULL, AMF_NUMBER, &f);         
 
-        LOG_INFO("deal_creat_stream| txn=%.2f| stream_id=%u| msg=ok|", 
-            *txn, rtmp->m_unit->m_stream_id);
+        LOG_INFO("deal_creat_stream| txn=%.2f| user_id=%u|"
+            " sid=%u| msg=ok|", 
+            F_PTR_VAL(txn), rtmp->m_user_id, sid);
+        return 0;
     } while (0);
-    
+
+    LOG_ERROR("deal_creat_stream| ret=%d| txn=%.2f|"
+        " user_id=%u| sid=%u| status=%d| msg=error|", 
+        F_PTR_VAL(txn), rtmp->m_user_id, sid, rtmp->m_status);
     return ret;
 }
 
@@ -692,284 +518,341 @@ Bool RtmpHandler::chkFlvData(Uint32 msg_type) {
         return FALSE;
     }
 }
-    
-Int32 RtmpHandler::dealPlay(RtmpNode* node, Rtmp* rtmp, AMFObject* obj) {
+
+Bool RtmpHandler::isAvcSid(Rtmp* rtmp, Uint32 sid) {
+    if (0 < sid && sid < RTMP_MAX_SESS_CNT && NULL != rtmp->m_unit[sid]) {
+        return TRUE;
+    } else {
+        return FALSE;
+    }
+} 
+
+Int32 RtmpHandler::dealPlay(Rtmp* rtmp, Uint32 sid, 
+    Uint32 pkg_sid, AMFObject* obj) {
     Int32 ret = 0;
     Bool bOk = FALSE;
     double* txn = NULL;
     Chunk* pv = NULL;
+    RtmpUint* unit = NULL;
     
-    do {
+    do { 
+        bOk = isAvcSid(rtmp, sid);
+        if (bOk) {
+            unit = rtmp->m_unit[sid];
+        } else {
+            ret = -1;
+            break;
+        }
+        
         txn = m_amf->indexPropNum(obj, 1);
 
         pv = m_amf->indexPropString(obj, 3); 
-        if (NULL != pv) {
-            creatAV(pv, &rtmp->m_unit->m_stream_name);
+        if (NULL != pv && 0 < pv->m_size) {
+            creatAV(pv, &unit->m_stream_name);
         } else {
             ret = -1;
             break;
         } 
         
-        genStreamKey(&rtmp->m_unit->m_app, &rtmp->m_unit->m_stream_name,
-            &rtmp->m_unit->m_key);
-
-        rtmp->m_unit->m_is_publisher = FALSE;
-
-        bOk = m_stream_center->regPlayer(rtmp->m_unit);
-        if (!bOk) { 
-            ret = -1;
+        genStreamKey(&rtmp->m_app, &unit->m_stream_name, &unit->m_key);
+        ret = m_stream_center->regPlayer(unit);
+        if (0 != ret) {
             break;
         }
 
-        rtmp->m_status = ENUM_RTMP_STATUS_AUTH_OPER; 
-  
-        /* user control begin stream */
-        sendUsrCtrl(node, 0, rtmp->m_unit->m_stream_id, 0);
- 
-        ret = sendStatus(node, &av_status_play_start, 
-            &rtmp->m_unit->m_stream_name);
-        if (0 != ret) { 
-            break;
-        } 
+        m_proto_center->notifyStart(rtmp, sid, &av_status_play_start,
+            RTMP_STREAM_START_DESC); 
+        m_stream_center->playBaseAvc(unit);
 
-        m_stream_center->playCache(rtmp->m_unit);
-
-        LOG_INFO("deal_play| txn=%.2f| stream_id=%u|"
-            " app=%.*s| stream_name=%.*s|"
-            " user_id=%u| msg=ok|", 
-            *txn, rtmp->m_unit->m_stream_id,
-            rtmp->m_unit->m_app.m_size,
-            rtmp->m_unit->m_app.m_data,
-            rtmp->m_unit->m_stream_name.m_size,
-            rtmp->m_unit->m_stream_name.m_data,
-            rtmp->m_unit->m_user_id);
+        LOG_INFO("deal_play| txn=%.2f| user_id=%u| sid=%u|"
+            " pkg_sid=%u| app=%.*s| stream_name=%.*s| msg=ok|", 
+            F_PTR_VAL(txn), rtmp->m_user_id, sid, pkg_sid, 
+            rtmp->m_app.m_size,
+            rtmp->m_app.m_data,
+            unit->m_stream_name.m_size,
+            unit->m_stream_name.m_data);
 
         return 0;
     } while (0);
 
-    LOG_ERROR("deal_play| ret=%d| txn=%.2f| stream_id=%u|"
-        " app=%.*s| stream_name=%.*s|"
-        " user_id=%u| msg=error|", 
-        ret, *txn, rtmp->m_unit->m_stream_id,
-        rtmp->m_unit->m_app.m_size,
-        rtmp->m_unit->m_app.m_data,
-        rtmp->m_unit->m_stream_name.m_size,
-        rtmp->m_unit->m_stream_name.m_data,
-        rtmp->m_unit->m_user_id);
+    LOG_ERROR("deal_play| ret=%d| txn=%.2f| user_id=%u| sid=%u|"
+        " pkg_sid=%u| app=%.*s| stream_name=%.*s| msg=error|", 
+        ret, F_PTR_VAL(txn), rtmp->m_user_id, sid, pkg_sid,
+        rtmp->m_app.m_size,
+        rtmp->m_app.m_data,
+        unit->m_stream_name.m_size,
+        unit->m_stream_name.m_data);
     
     return ret;
 }
 
-Void RtmpHandler::notifyPublisher(RtmpUint* player, AMFObject* obj) {
-    RtmpUint* publisher = NULL;
-    
-    if (!player->m_is_publisher && NULL != player->m_ctx) {
-        publisher = player->m_ctx->m_publisher;
-
-        if (NULL != publisher) { 
-            sendAmfObj("test_pause", publisher->m_entity, 
-                0, publisher->m_stream_id, 
-                RTMP_MSG_TYPE_INVOKE, obj);
-        }
-    }
-}
-
-Int32 RtmpHandler::dealPause(RtmpNode* node, Rtmp* rtmp, AMFObject* obj) {
+Int32 RtmpHandler::dealPause(Rtmp* rtmp, Uint32 sid, 
+    Uint32 pkg_sid, AMFObject* obj) {
     Int32 ret = 0;
+    Bool bOk = FALSE;
     double* txn = NULL;
     Int32* pi = NULL;
+    RtmpUint* unit = NULL;
 
-    do {
+    do { 
+        bOk = isAvcSid(rtmp, sid);
+        if (bOk) {
+            unit = rtmp->m_unit[sid];
+        } else {
+            ret = -1;
+            break;
+        }
+        
         txn = m_amf->indexPropNum(obj, 1);
         
         pi = m_amf->indexPropBool(obj, 3);
         if (NULL != pi) {
-            rtmp->m_unit->m_is_pause = *pi;
+            unit->m_is_pause = *pi;
         } else {
             ret = -1;
             break;
         }
 
-        if (rtmp->m_unit->m_is_pause) {            
-            ret = sendStatus(node, &av_netstream_pause_notify, 
-                &rtmp->m_unit->m_stream_name); 
-            
-            /* user control stop stream */
-            sendUsrCtrl(node, 1, rtmp->m_unit->m_stream_id, 0); 
+        if (unit->m_is_pause) {    
+            m_proto_center->notifyStop(rtmp, sid, 
+                &av_netstream_pause_notify, RTMP_STREAM_PAUSE_DESC);  
         } else {
-            /* user control begin stream */
-            sendUsrCtrl(node, 0, rtmp->m_unit->m_stream_id, 0); 
-
-            ret = sendStatus(node, &av_netstream_unpause_notify, 
-                &rtmp->m_unit->m_stream_name); 
-
-            m_stream_center->playCache(rtmp->m_unit);
+            m_proto_center->notifyStart(rtmp, sid, 
+                &av_netstream_unpause_notify, RTMP_STREAM_UNPAUSE_DESC); 
         }
     } while (0);
 
-    LOG_INFO("deal_pause| ret=%d| txn=%.2f| stream_id=%u|"
-        " stream_name=%.*s| user_id=%u|", 
-        ret, *txn, rtmp->m_unit->m_stream_id,
-        rtmp->m_unit->m_stream_name.m_size,
-        rtmp->m_unit->m_stream_name.m_data,
-        rtmp->m_unit->m_user_id);
+    LOG_INFO("deal_pause| ret=%d| txn=%.2f| user_id=%u| sid=%u|"
+        " pkg_sid=%u| app=%.*s| stream_name=%.*s|", 
+        ret, F_PTR_VAL(txn), rtmp->m_user_id, sid, pkg_sid,
+        rtmp->m_app.m_size,
+        rtmp->m_app.m_data,
+        unit->m_stream_name.m_size,
+        unit->m_stream_name.m_data);
 
     return ret;
 }
 
-Int32 RtmpHandler::dealPublish(RtmpNode* node, Rtmp* rtmp, AMFObject* obj) {
+Int32 RtmpHandler::dealPublish(Rtmp* rtmp, Uint32 sid, 
+    Uint32 pkg_sid, AMFObject* obj) {
     Int32 ret = 0;
     Bool bOk = FALSE;
     double* txn = NULL;
     Chunk* pv = NULL;
+    RtmpUint* unit = NULL;
 
-    do {
-        txn = m_amf->indexPropNum(obj, 1);
-        
-        pv = m_amf->indexPropString(obj, 3); 
-        if (NULL != pv) {
-            creatAV(pv, &rtmp->m_unit->m_stream_name);
+    do { 
+        bOk = isAvcSid(rtmp, sid);
+        if (bOk) {
+            unit = rtmp->m_unit[sid];
         } else {
             ret = -1;
             break;
         }
-                
+        
+        txn = m_amf->indexPropNum(obj, 1);
+
+        pv = m_amf->indexPropString(obj, 3); 
+        if (NULL != pv && 0 < pv->m_size) {
+            creatAV(pv, &unit->m_stream_name);
+        } else {
+            ret = -1;
+            break;
+        } 
+
         pv = m_amf->indexPropString(obj, 4);
         if (NULL != pv) {
-            creatAV(pv, &rtmp->m_unit->m_stream_type);
+            creatAV(pv, &unit->m_stream_type);
         } else {
             ret = -1;
             break;
         }
         
-        genStreamKey(&rtmp->m_unit->m_app, &rtmp->m_unit->m_stream_name,
-            &rtmp->m_unit->m_key);
-
-        rtmp->m_unit->m_is_publisher = TRUE;
-
-        bOk = m_stream_center->regPublisher(rtmp->m_unit);
-        if (!bOk) { 
-            ret = -1;
+        genStreamKey(&rtmp->m_app, &unit->m_stream_name, &unit->m_key);
+        ret = m_stream_center->regPublisher(unit);
+        if (0 != ret) {
             break;
         }
 
-        rtmp->m_status = ENUM_RTMP_STATUS_AUTH_OPER;
+        m_proto_center->notifyStart(rtmp, sid, &av_netstream_publish_start,
+            RTMP_STREAM_PUBLISH_DESC); 
 
-        /* begin stream */
-        sendUsrCtrl(node, 0, rtmp->m_unit->m_stream_id, 0); 
- 
-        ret = sendStatus(node, &av_netstream_publish_start, 
-            &rtmp->m_unit->m_stream_name); 
-        if (0 != ret) {
-            break;
-        } 
-
-        LOG_INFO("deal_publish| txn=%.2f| stream_id=%u|"
-            " app=%.*s| stream_name=%.*s|"
-            " user_id=%u| msg=ok|", 
-            *txn, rtmp->m_unit->m_stream_id,
-            rtmp->m_unit->m_app.m_size,
-            rtmp->m_unit->m_app.m_data,
-            rtmp->m_unit->m_stream_name.m_size,
-            rtmp->m_unit->m_stream_name.m_data,
-            rtmp->m_unit->m_user_id);
+        LOG_INFO("deal_publish| txn=%.2f| user_id=%u| sid=%u|"
+            " pkg_sid=%u| app=%.*s| stream_name=%.*s| msg=ok|", 
+            F_PTR_VAL(txn), rtmp->m_user_id, sid, pkg_sid,
+            rtmp->m_app.m_size,
+            rtmp->m_app.m_data,
+            unit->m_stream_name.m_size,
+            unit->m_stream_name.m_data);
 
         return 0;
     } while (0);
 
-    LOG_ERROR("deal_publish| ret=%d| txn=%.2f| stream_id=%u|"
-        " app=%.*s| stream_name=%.*s|"
-        " user_id=%u| msg=error|", 
-        ret, *txn, rtmp->m_unit->m_stream_id,
-        rtmp->m_unit->m_app.m_size,
-        rtmp->m_unit->m_app.m_data,
-        rtmp->m_unit->m_stream_name.m_size,
-        rtmp->m_unit->m_stream_name.m_data,
-        rtmp->m_unit->m_user_id);
+    LOG_ERROR("deal_publish| ret=%d| txn=%.2f| user_id=%u| sid=%u|"
+        " pkg_sid=%u| app=%.*s| stream_name=%.*s| msg=error|", 
+        ret, F_PTR_VAL(txn), rtmp->m_user_id, sid, pkg_sid,
+        rtmp->m_app.m_size,
+        rtmp->m_app.m_data,
+        unit->m_stream_name.m_size,
+        unit->m_stream_name.m_data);
     
     return ret;
 }
 
-Int32 RtmpHandler::dealUnpublish(RtmpNode*, Rtmp* rtmp, 
-    AMFObject* obj) {
+RtmpStream* RtmpHandler::findStream(Rtmp* rtmp, const Chunk* name) {
+    RtmpStream* stream = NULL;
+    Chunk chunk = AMF_CHUNK_EMPTY;
+    typeString strKey;
+
+    genStreamKey(&rtmp->m_app, name, &chunk);
+    StreamCenter::toString(&chunk, strKey);
+
+    stream = m_stream_center->findStream(strKey);
+
+    freeAV(&chunk);
+    return stream;
+}
+
+Int32 RtmpHandler::dealFCPublish(Rtmp* rtmp, Uint32 sid, 
+    Uint32 pkg_sid, AMFObject* obj) {
     Int32 ret = 0;
     double* txn = NULL;
-    Chunk* pv = NULL;
-    RtmpUint* unit = rtmp->m_unit;
-    Chunk name = AMF_CHUNK_EMPTY;
+    Chunk* path = NULL;
+    RtmpStream* stream = NULL;
 
     do {
         txn = m_amf->indexPropNum(obj, 1);
         
-        pv = m_amf->indexPropString(obj, 3); 
-        if (NULL != pv) {
-            name = *pv;
-        } else {
+        path = m_amf->indexPropString(obj, 3); 
+        if (NULL == path) {
             ret = -1;
             break;
         } 
 
-        LOG_INFO("deal_unpublish| txn=%.2f|"
-            " stream_id=%u| name=%.*s| msg=ok|", 
-            *txn, unit->m_stream_id,
-            name.m_size, name.m_data);
+        stream = findStream(rtmp, path);
+        if (NULL == stream) {
+            ret = 0;
+            break;
+        }
 
-        return 0;
+        m_stream_center->publishFC(stream, path);  
     } while (0);
-    
-    LOG_INFO("deal_unpublish| ret=%d| txn=%.2f| stream_id=%u|"
-        " name=%.*s| msg=error|", 
-        ret, *txn, unit->m_stream_id,
-        name.m_size, name.m_data);
+
+    LOG_INFO("deal_FCPublish| ret=%d| txn=%.2f|"
+            " user_id=%u| sid=%u| pkg_sid=%u| path=%.*s|", 
+            ret, F_PTR_VAL(txn), rtmp->m_user_id,
+            sid, pkg_sid,
+            path->m_size, path->m_data);
 
     return ret;
 }
 
-Int32 RtmpHandler::dealDelStream(RtmpNode* , Rtmp* rtmp, AMFObject* obj) {
+Int32 RtmpHandler::dealFCUnpublish(Rtmp* rtmp, Uint32 sid, 
+    Uint32 pkg_sid, AMFObject* obj) {
     Int32 ret = 0;
-    double req_id = 0;
+    double* txn = NULL;
+    Chunk* path = NULL;
+    RtmpStream* stream = NULL;
+
+    do {
+        txn = m_amf->indexPropNum(obj, 1);
+        
+        path = m_amf->indexPropString(obj, 3); 
+        if (NULL == path) {
+            ret = -1;
+            break;
+        } 
+
+        stream = findStream(rtmp, path);
+        if (NULL == stream) {
+            ret = 0;
+            break;
+        }
+
+        m_stream_center->unpublishFC(stream, path);  
+    } while (0);
+
+    LOG_INFO("deal_FCUnpublish| ret=%d| txn=%.2f|"
+            " user_id=%u| sid=%u| pkg_sid=%u| path=%.*s|", 
+            ret, F_PTR_VAL(txn), rtmp->m_user_id,
+            sid, pkg_sid,
+            path->m_size, path->m_data);
+
+    return ret;
+}
+
+Int32 RtmpHandler::dealReleaseStream(Rtmp* rtmp, Uint32 sid, 
+    Uint32 pkg_sid, AMFObject* obj) {
+    Int32 ret = 0;
+    double* txn = NULL;
+    Chunk* path = NULL;
+    Chunk chunk = AMF_CHUNK_EMPTY;
+    RtmpStream* stream = NULL;
+
+    do {
+        txn = m_amf->indexPropNum(obj, 1);
+        
+        path = m_amf->indexPropString(obj, 3); 
+        if (NULL == path) {
+            ret = -1;
+            break;
+        } 
+
+        stream = findStream(rtmp, path);
+        if (NULL == stream) {
+            ret = 0;
+            break;
+        }
+
+        m_stream_center->stopPublisher(stream);   
+    } while (0);
+
+    LOG_INFO("deal_release_stream| ret=%d| txn=%.2f| user_id=%u|"
+        " sid=%u| pkg_sid=%u| stream_name=%.*s|", 
+        ret, F_PTR_VAL(txn), rtmp->m_user_id,
+        sid, pkg_sid,
+        path->m_size, path->m_data); 
+    
+    freeAV(&chunk);
+    return ret;
+}
+
+Int32 RtmpHandler::dealDelStream(Rtmp* rtmp, Uint32 sid, 
+    Uint32 pkg_sid, AMFObject* obj) {
+    Int32 ret = 0;
+    Bool bOk = TRUE;
+    Uint32 req_sid = RTMP_INVALID_SID;
     double* txn = NULL;
     double* pf = NULL;
-    RtmpUint* unit = rtmp->m_unit;
 
     do {
         txn = m_amf->indexPropNum(obj, 1);
         
         pf = m_amf->indexPropNum(obj, 3); 
         if (NULL != pf) {
-            req_id = *pf;
+            req_sid = (Uint32)*pf;
         } else {
             ret = -1;
             break;
         } 
 
-        /* notify the player that the stream is end */
-        if (rtmp->m_unit->m_is_publisher) {
-            
-            m_stream_center->notifyEnd(unit->m_ctx);
-
-            m_stream_center->unregPublisher(unit);
+        bOk = isAvcSid(rtmp, req_sid);
+        if (bOk) {
+            m_stream_center->stopUnit(rtmp, req_sid, FALSE);
         } else {
-            m_stream_center->unregPlayer(unit); 
-        }
-        
-        rtmp->m_status = ENUM_RTMP_STATUS_CLOSED; 
-
-        LOG_INFO("deal_deleteStream| txn=%.2f|"
-            " stream_id=%u| req_id=%.2f| msg=ok|", 
-            *txn, rtmp->m_unit->m_stream_id, req_id);
-
-        return 0;
+            break;
+        } 
     } while (0);
     
-    LOG_INFO("deal_deleteStream| ret=%d| txn=%.2f| stream_id=%u|"
-        " req_id=%.2f| msg=error|", 
-        ret, *txn, rtmp->m_unit->m_stream_id, req_id);
+    LOG_INFO("deal_deleteStream| ret=%d| txn=%.2f|"
+        " user_id=%u| req_sid=%u| sid=%u| pkg_sid=%u|", 
+        ret, F_PTR_VAL(txn), rtmp->m_user_id, req_sid,
+        sid, pkg_sid);
 
     return ret;
 }
 
-Int32 RtmpHandler::dealMetaData(RtmpNode* node, Rtmp* rtmp, CacheHdr* hdr) {
+Int32 RtmpHandler::dealMetaData(Rtmp* rtmp, CacheHdr* hdr) {
     Int32 ret = 0;
     Int32 cnt = 0;
     Bool bOk = FALSE;
@@ -981,172 +864,216 @@ Int32 RtmpHandler::dealMetaData(RtmpNode* node, Rtmp* rtmp, CacheHdr* hdr) {
     cache = CacheCenter::getCache(hdr);
     pkg = MsgCenter::cast<RtmpPkg>(cache); 
 
-    if (!pkg->m_has_striped) {
-        cnt = m_amf->peekString(pkg->m_payload, pkg->m_size, &chunk);
-        if (0 >= cnt) {
-            LOG_ERROR("deal_meta_data| msg=decode string error|");
+    do {        
+        if (!pkg->m_has_striped) {
+            pkg->m_has_striped = TRUE;
+            
+            cnt = m_amf->peekString(pkg->m_payload, pkg->m_size, &chunk);
+            if (0 >= cnt) {
+                LOG_ERROR("deal_meta_data| msg=decode string error|");
 
-            return -1;
+                ret = -1;
+                break;
+            }
+
+            // strip '@metadata'
+            if (matchAV(&av_meta_prefix_data, &chunk)) {
+                pkg->m_skip = cnt;
+
+                LOG_INFO("deal_meta_data| skip=%d|", pkg->m_skip);
+            } 
         }
-
-        // strip '@metadata'
-        if (matchAV(&av_meta_prefix_data, &chunk)) {
-            pkg->m_skip = cnt;
-
-            LOG_INFO("deal_meta_data| skip=%d|", pkg->m_skip);
-        }
-
-        pkg->m_has_striped = TRUE;
 
         bOk = m_amf->decode(&obj, pkg->m_payload + pkg->m_skip, 
             pkg->m_size - pkg->m_skip);
-        if (bOk) {
-            m_amf->dump("deal_meta_data", &obj); 
-            
-            m_amf->resetObj(&obj);
-        } else {
-            LOG_ERROR("deal_meta_data| msg=decode error|");
+        if (!bOk) { 
+            ret = -2;
+            break;
+        }
 
-            m_amf->resetObj(&obj);
-            return -1;
-        } 
-    }
+        m_amf->dump("deal_meta_data", &obj); 
 
-    /* go to flv data handler */
-    ret = dealFlvData(node, rtmp, ENUM_MSG_RTMP_TYPE_META_INFO, hdr);
+        /* go to flv data handler */
+        ret = dealFlvData(rtmp, hdr);
+        return ret;
+    } while (0);
+    
+    LOG_ERROR("deal_meta_data| ret=%d| user_id=%u| pkg_sid=%u| msg=error|",
+        ret, rtmp->m_user_id, pkg->m_sid);
+    
+    m_amf->freeObj(&obj);
     return ret;
 }
 
-Void RtmpHandler::cacheAvc(RtmpStream* stream, 
-    Int32 msg_type, Cache* cache) {
+Int32 RtmpHandler::publish(RtmpUint* unit, Cache* cache) {
+    Int32 ret = 0;
+    Int32 msg_type = 0;
     Int32 payload_size = 0;
+    Uint32 pkg_sid = 0;
     Byte* data = NULL;
     RtmpPkg* pkg = NULL;
 
     pkg = MsgCenter::cast<RtmpPkg>(cache);
-    
-    payload_size = pkg->m_size - pkg->m_skip;
+    msg_type = (Int32)pkg->m_msg_type;
+    pkg_sid = pkg->m_sid;
     data = pkg->m_payload + pkg->m_skip;
-
+    payload_size = pkg->m_size - pkg->m_skip;
+    
+    /* publisher cache some data */
     switch (msg_type) {
     case ENUM_MSG_RTMP_TYPE_AUDIO:
         if (2 <= payload_size && m_stream_center->chkAudioSeq(data)) {
-            m_stream_center->cacheAvc(stream, ENUM_AVC_AUDIO, cache);
-        } else {
-            m_stream_center->updateAvc(stream, ENUM_AVC_AUDIO, cache);
-        }
-
-        m_stream_center->updateAvc(stream, ENUM_AVC_META_DATA, cache);
+            m_stream_center->cacheAvc(unit, ENUM_AVC_AUDIO, cache);
+        } 
         
         break;
 
     case ENUM_MSG_RTMP_TYPE_VIDEO:
         if (2 <= payload_size && m_stream_center->chkVideoSeq(data)) {
-            m_stream_center->cacheAvc(stream, ENUM_AVC_VEDIO, cache);
-        } else {
-            m_stream_center->updateAvc(stream, ENUM_AVC_VEDIO, cache);
+            m_stream_center->cacheAvc(unit, ENUM_AVC_VEDIO, cache);
         }
         
         break;
 
     case ENUM_MSG_RTMP_TYPE_META_INFO:
-        m_stream_center->cacheAvc(stream, ENUM_AVC_META_DATA, cache);
+        m_stream_center->cacheAvc(unit, ENUM_AVC_META_DATA, cache);
         break;
 
     default:
         break;
     }
+
+    if (!unit->m_blocked) {
+        m_stream_center->publish(unit->m_ctx, msg_type, cache); 
+    }
+
+    LOG_DEBUG("deal_flv_publish| ret=%d| msg_type=%d|"
+        " user_id=%u| sid=%u| pkg_sid=%u| blocked=%d| paused=%d|", 
+        ret, msg_type, 
+        unit->m_parent->m_user_id,
+        unit->m_sid, pkg_sid,
+        unit->m_blocked,
+        unit->m_is_pause);
+
+    return ret;
 }
 
-Int32 RtmpHandler::dealFlvData(RtmpNode* node, Rtmp* rtmp,
-    Int32 msg_type, CacheHdr* hdr) {
+Int32 RtmpHandler::play(RtmpUint* unit, Cache* cache) {
     Int32 ret = 0;
-    Cache* cache = NULL;
+    Int32 msg_type = 0;
+    Uint32 pkg_sid = 0;
     Byte* data = NULL;
     RtmpPkg* pkg = NULL;
-    RtmpUint* unit = rtmp->m_unit;
 
-    cache = CacheCenter::getCache(hdr); 
     pkg = MsgCenter::cast<RtmpPkg>(cache);
-    data = pkg->m_payload + pkg->m_skip; 
-    
-    if (unit->m_is_publisher) {
-        
-        /* publisher cache some data */
-        cacheAvc(unit->m_ctx, msg_type, cache);
+    msg_type = (Int32)pkg->m_msg_type;
+    pkg_sid = pkg->m_sid;
+    data = pkg->m_payload + pkg->m_skip;
 
-        if (!unit->m_blocked) {
-            m_stream_center->publish(unit->m_ctx, msg_type, cache); 
+    /* players, and is not blocked */
+    if (!unit->m_blocked) {
+        if (!unit->m_is_pause) {
+            /* normal status to play, */
+            ret = m_stream_center->sendFlv(unit, cache);
+        } else {
+            /* pause status, try to find key frame, then block */
+            if (ENUM_MSG_RTMP_TYPE_VIDEO == pkg->m_msg_type
+                && m_stream_center->chkVideoKeyFrame(data)) {
+                unit->m_blocked = TRUE;
+            } else {
+                ret = m_stream_center->sendFlv(unit, cache);
+            }
         }
     } else {
-        /* players, and is not blocked */
-        if (!unit->m_blocked) {
-            if (!unit->m_is_pause) {
-                /* normal status to play, */
-                ret = sendRtmpPkg(node, unit->m_stream_id, cache); 
-            } else {
-                /* pause status, try to find key frame, then block */
-                if (ENUM_MSG_RTMP_TYPE_VIDEO == msg_type
-                    && m_stream_center->chkVideoKeyFrame(data)) {
-                    unit->m_blocked = TRUE;
-                } else {
-                    ret = sendRtmpPkg(node, unit->m_stream_id, cache);
-                }
-            }
+        if (unit->m_is_pause) {
+            /* be in blocked status, and pressed pause, ignore pkg */
         } else {
-            /* be in blocked status, and pressed unpause */
-            if (!unit->m_is_pause) {
-                /* try to find the first key frame, then unblock msgs */
-                if (ENUM_MSG_RTMP_TYPE_VIDEO == msg_type
-                    && m_stream_center->chkVideoKeyFrame(data)) {
-                    unit->m_blocked = FALSE;
+            /* try to find the first key frame, then unblock msgs */
+            if (ENUM_MSG_RTMP_TYPE_VIDEO == pkg->m_msg_type
+                && m_stream_center->chkVideoKeyFrame(data)) {
+                unit->m_blocked = FALSE;
 
-                    ret = sendRtmpPkg(node, unit->m_stream_id, cache);
-                }
+                ret = m_stream_center->sendFlv(unit, cache);
             }
         }
-    } 
+    }
 
-    LOG_DEBUG("deal_flv_data| msg_type=%d| user_id=%u|"
-        " stream_id=%u| is_publisher=%d| msg=ok|", 
-        msg_type, 
-        unit->m_user_id,
-        unit->m_stream_id,
-        unit->m_is_publisher); 
+    LOG_DEBUG("deal_flv_play| ret=%d| msg_type=%d|"
+        " user_id=%u| sid=%u| pkg_sid=%u| blocked=%d| paused=%d|", 
+        ret, msg_type, 
+        unit->m_parent->m_user_id,
+        unit->m_sid, pkg_sid,
+        unit->m_blocked,
+        unit->m_is_pause);
+
     return ret;
 }
 
-Void RtmpHandler::closeRtmp(RtmpNode*, Rtmp* rtmp) {
-    if (ENUM_RTMP_STATUS_AUTH_OPER == rtmp->m_status) {
-        if (rtmp->m_unit->m_is_publisher) {
-            m_stream_center->unregPublisher(rtmp->m_unit);
-        } else {
-            m_stream_center->unregPlayer(rtmp->m_unit);
-        }
-    }
-}
-
-Void RtmpHandler::updateOutTs(RtmpUint* unit) {
-    if (unit->m_base_out_ts < unit->m_max_out_epoch) {
-        unit->m_base_out_ts = unit->m_max_out_epoch;
-    }
-}
-
-Int32 RtmpHandler::dealNotifyEndStream(RtmpNode* ,
-    Rtmp* rtmp, CacheHdr* hdr) {
+Int32 RtmpHandler::dealFlvData(Rtmp* rtmp, CacheHdr* hdr) {
     Int32 ret = 0;
-    Uint32 req_id = 0;
-    RtmpUint* unit = rtmp->m_unit;
+    Bool bOk = FALSE;
+    Int32 msg_type = 0;
+    Uint32 sid = 0;
+    Uint32 pkg_sid = 0;
+    MsgComm* msg = NULL;
+    Cache* cache = NULL;
+    RtmpPkg* pkg = NULL;
+    RtmpUint* unit = NULL;
 
-    req_id = (Uint32)MsgCenter::getExchMsgVal(hdr);
+    msg = MsgCenter::body<MsgComm>(hdr);
+    sid = msg->m_sid;   // this is the real used sid
+    
+    cache = CacheCenter::getCache(hdr); 
+    pkg = MsgCenter::cast<RtmpPkg>(cache);
+    msg_type = (Int32)pkg->m_msg_type;
+    pkg_sid = pkg->m_sid;   // this is the original pkg sid
 
-    /* when a stream ends, then the players base this epoch */
-    updateOutTs(unit);
+    do {
+        bOk = isAvcSid(rtmp, sid);
+        if (bOk) {
+            unit = rtmp->m_unit[sid];
+        } else {
+            LOG_ERROR("deal_flv_data| msg_type=%d|"
+                " user_id=%u| sid=%u| pkg_sid=%u|"
+                " msg=invalid sid|", 
+                msg_type, rtmp->m_user_id, sid, pkg_sid);
+            
+            ret = -1;
+            break;
+        }
+        
+        if (ENUM_OPER_PLAYER == unit->m_oper_auth) {
+            ret = play(unit, cache); 
+        } else if (ENUM_OPER_PUBLISHER == unit->m_oper_auth) {
+            ret = publish(unit, cache);
+        } else {
+            LOG_ERROR("deal_flv_data| msg_type=%d|"
+                " user_id=%u| sid=%u| pkg_sid=%u| oper_auth=%d|"
+                " msg=invalid oper_auth|", 
+                msg_type, rtmp->m_user_id, 
+                sid, pkg_sid, unit->m_oper_auth);
 
-    LOG_INFO("deal_notify_end| stream_id=%u| self_id=%u|"
-        " base_out_ts=%u|",
-        req_id, unit->m_stream_id, unit->m_base_out_ts);
-
+            ret = -1;
+        }
+    } while (0);
+     
     return ret;
+}
+
+Int32 RtmpHandler::sendBytesReport(Rtmp* rtmp, Uint32 seqBytes) {
+    Int32 ret = 0;
+
+    ret = m_proto_center->sendBytesReport(rtmp, seqBytes);
+    return ret;
+}
+
+Void RtmpHandler::closeRtmp(Rtmp* rtmp) {
+    rtmp->m_status = ENUM_RTMP_STATUS_CLOSED;
+    
+    for (Uint32 i=1; i<RTMP_MAX_SESS_CNT; ++i) { 
+        if (NULL != rtmp->m_unit[i]) {
+            m_stream_center->stopUnit(rtmp, i, FALSE);
+        }
+    }
 }
 

@@ -559,7 +559,7 @@ Void Director::procTimer(EnumCtrlType type, CacheHdr* hdr) {
 
 template<>
 Void Director::procTimeout<CTRL_TYPE_RCV>(struct TimerEle* ele) {
-    LOG_DEBUG("proc_recv_timeout| type=%d| interval=%u| expires=%u|",
+    LOG_VERB("proc_recv_timeout| type=%d| interval=%u| expires=%u|",
         ele->m_type, ele->m_interval, ele->m_expires);
 
     updateTimer(ele);
@@ -567,7 +567,7 @@ Void Director::procTimeout<CTRL_TYPE_RCV>(struct TimerEle* ele) {
 
 template<>
 Void Director::procTimeout<CTRL_TYPE_SND>(struct TimerEle* ele) {
-    LOG_DEBUG("proc_send_timeout| type=%d| interval=%u| expires=%u|",
+    LOG_VERB("proc_send_timeout| type=%d| interval=%u| expires=%u|",
         ele->m_type, ele->m_interval, ele->m_expires);
 
     updateTimer(ele);
@@ -575,15 +575,14 @@ Void Director::procTimeout<CTRL_TYPE_SND>(struct TimerEle* ele) {
 
 template<>
 Void Director::procTimeout<CTRL_TYPE_DEAL>(struct TimerEle* ele) {
-    LOG_DEBUG("proc_deal_timeout| type=%d| interval=%u| expires=%u|",
-        ele->m_type, ele->m_interval, ele->m_expires);
+    LOG_VERB("proc_deal_timeout| type=%d| interval=%u| expires=%u|", ele->m_type, ele->m_interval, ele->m_expires);
 
     updateTimer(ele);
 }
 
 template<>
 Void Director::procTimeout<CTRL_TYPE_CMD>(struct TimerEle* ele) {
-    LOG_DEBUG("proc_cmd_timeout| type=%d| interval=%u| expires=%u|",
+    LOG_VERB("proc_cmd_timeout| type=%d| interval=%u| expires=%u|",
         ele->m_type, ele->m_interval, ele->m_expires);
 
     updateTimer(ele);

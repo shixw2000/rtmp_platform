@@ -7,6 +7,9 @@
 struct CacheHdr;
 struct Cache;
 struct RtmpUint;
+struct RtmpStream;
+struct Rtmp;
+struct RtmpNode;
 
 enum EnumSockRet {
     ENUM_SOCK_MARK_FINISH = 0,
@@ -74,6 +77,7 @@ enum EnumTimerType {
 
     ENUM_TIMER_END
 };
+
 
 static const Int32 DEF_TIMER_TICK_MS = 100; // 100ms
 static const Uint32 DEF_SECOND_TICK_CNT = 10;
@@ -145,10 +149,7 @@ enum EnumRtmpStatus {
     ENUM_RTMP_STATUS_INIT = 0,
 
     ENUM_RTMP_STATUS_HANDSHAKE,
-    ENUM_RTMP_STATUS_CONNECTED,
-    ENUM_RTMP_STATUS_CREATED_STREAM,
-    ENUM_RTMP_STATUS_AUTH_OPER,
-
+    ENUM_RTMP_STATUS_CONNECTED, 
     ENUM_RTMP_STATUS_CLOSED,
     
     ENUM_RTMP_STATUS_ERROR
@@ -159,25 +160,32 @@ enum RTMPChannel {
     RTMP_INVOKE_CID = 3,     ///< channel for sending server control messages
     
     RTMP_SOURCE_CHANNEL  = 4,   ///< channel for a/v invokes
-
-    RTMP_AVC_CHANNEL_START = 4, 
-    
-    RTMP_AUDIO_CHANNEL = 0x0,  ///< channel for audio data
-    RTMP_VIDEO_CHANNEL = 0x1,   ///< channel for video data
-    
+    RTMP_OTHER_CHANNEL = 5,
 
     RTMP_MAX_CHNN_ID = 64
 };
+
+enum RtmpUsrCtrlEvent {
+    ENUM_USR_CTRL_STREAM_BEGIN = 0,
+    ENUM_USR_CTRL_STREAM_END = 1,
+};
+
+static const Uint32 RTMP_INVALID_SID = 0;
+static const Uint32 RTMP_MAX_SESS_CNT = (RTMP_MAX_CHNN_ID 
+    - RTMP_OTHER_CHANNEL) >> 1;
 
 static const Int32 RTMP_MAX_HEADER_SIZE = 16;
 static const Int32 RTMP_MIN_CHUNK_SIZE = 128;
 static const Int32 RTMP_DEF_CHUNK_SIZE = 132;
 static const Int32 RTMP_EXT_TIMESTAMP_SIZE = 4;
 static const Uint32 RTMP_TIMESTAMP_EXT_MARK = 0XFFFFFF;
+
 static const Uint32 RTMP_LARGE_FMT = 0;
 static const Uint32 RTMP_MEDIUM_FMT = 1;
 static const Uint32 RTMP_SMALL_FMT = 2;
 static const Uint32 RTMP_MINIMUM_FMT = 3;
+static const Int32 RTMP_HEADER_SIZE_ARR[] = { 11, 7, 3, 0 };
+
 static const Int32 AMF_MAX_STRING_SIZE = 0x10000;
 static const Uint32 AMF_END_OF_OBJ = 0x9;
 static const Uint32 RTMP_DEF_WIND_SIZE = 2500000;
@@ -205,16 +213,14 @@ enum EnumBWType {
     ENUM_BW_DYNAMIC
 };
 
-
 typedef struct HeaderRtmp {
     Uint32 m_epoch;     // the absolute time
     Uint32 m_timestamp;
-    Uint32 m_stream_id;
+    Uint32 m_sid;
     Uint32 m_pld_size;
     Uint32 m_fmt:2,
         m_cid:6,
-        m_type:8, 
-        res:16; 
+        m_rtmp_type:8; 
 } HeaderRtmp;
 
 typedef struct RtmpHandshake {
@@ -227,12 +233,47 @@ typedef struct RtmpHandshake {
 typedef struct ChnInput {
     Cache* m_pkg;
     Int32 m_rd_bytes;
-    HeaderRtmp m_header; 
+    Uint32 m_epoch;     // the absolute time
+    Uint32 m_timestamp;
+    Uint32 m_sid;
+    Uint32 m_pld_size;
+    Uint32 m_fmt:2,
+        m_cid:6,
+        m_rtmp_type:8;
+        
 } ChnInput;
 
 typedef struct ChnOutput {
-    HeaderRtmp m_header;
+    Uint32 m_epoch;     // the absolute time
+    Uint32 m_timestamp; 
+    Uint32 m_sid;
+    Uint32 m_pld_size;
+    Uint32 m_cid:6,
+        m_rtmp_type:8;
 } ChnOutput;
+
+enum EnumOperAuth {
+    ENUM_OPER_NULL = 0,
+    ENUM_OPER_PLAYER,
+    ENUM_OPER_PUBLISHER,
+
+    ENUM_OPER_END
+};
+
+struct RtmpUint {
+    Rtmp* m_parent;
+    RtmpStream* m_ctx;
+    Chunk m_stream_name;
+    Chunk m_stream_type;
+    Chunk m_key; 
+    
+    Uint32 m_sid;
+    Uint32 m_delta_out_ts;
+    Uint32 m_max_out_epoch;
+    Int32 m_oper_auth;
+    Bool m_blocked;
+    Bool m_is_pause; 
+};
 
 typedef struct RtmpChn { 
     Cache* m_cache; // used by handshake
@@ -247,11 +288,16 @@ typedef struct RtmpChn {
 
 typedef struct Rtmp {
     list_head m_rpc_calls; 
-    RtmpUint* m_unit;
-    ChnInput* m_chnnIn[RTMP_MAX_CHNN_ID];
-    ChnOutput* m_chnnOut[RTMP_MAX_CHNN_ID];
+    RtmpNode* m_entity;     // level of socket
+    ChnInput* m_chnnIn[RTMP_MAX_CHNN_ID];   // chn input
+    ChnOutput* m_chnnOut[RTMP_MAX_CHNN_ID]; // chn output, level of connection
+    RtmpUint* m_unit[RTMP_MAX_SESS_CNT];   // level of stream
     RtmpChn m_chn;
+    Chunk m_app;
+    Chunk m_tcUrl;
 
+    Uint32 m_user_id;
+    Uint32 m_encoding;
     Int32 m_fd;
     Int32 m_chunkSizeIn;
     Int32 m_chunkSizeOut;
@@ -264,21 +310,19 @@ typedef struct Rtmp {
     Uint32 m_snd_ack_bytes;
     Uint32 m_cli_window_size;
     
-    EnumRtmpStatus m_status;    
+    EnumRtmpStatus m_status;    // status of rtmp    
 } Rtmp;
 
 /*******begin: kinds of caches*********/
 typedef struct RtmpPkg {
-    Uint32 m_epoch;
-    Uint32 m_timestamp;
-    Uint32 m_stream_id;
-    Uint32 m_rtmp_type:8,
-        m_msg_type:8,
-        m_fmt:2,
-        m_cid:6,
-        m_has_striped:1;
-    Int32 m_size;
-    Int32 m_skip;
+    Uint32 m_epoch; // absolute time
+    Uint32 m_timestamp; // delta time
+    Uint32 m_sid;
+    Uint32 m_rtmp_type:8,   // rtmp type
+        m_msg_type:8,       // customer type 
+        m_has_striped:1;    // used by meta_data
+    Int32 m_size;   // payload max size       
+    Int32 m_skip;   // payload skip len
     Byte m_payload[0];
 } RtmpPkg;
 

@@ -2,7 +2,24 @@
 #include"rtmpnode.h"
 #include"cache.h"
 #include"msgtype.h"
+#include"payload.h"
+#include"rtmpproto.h"
 
+
+struct RtmpStream {
+    RtmpUint* m_publisher;
+    Cache* m_avc_cache[ENUM_AVC_END];
+  
+    Uint32 m_avc_id;
+    Uint32 m_out_delta_ts;
+    typeString m_key; 
+    typeMapUnit m_players;
+};
+
+StreamCenter::StreamCenter(RtmpProto* proto_center)
+    : m_proto_center(proto_center) {
+    m_avc_id = 0;
+}
 
 RtmpStream* StreamCenter::findStream(const typeString& key) {
     RtmpStream* stream = NULL;
@@ -18,12 +35,26 @@ RtmpStream* StreamCenter::findStream(const typeString& key) {
     } 
 }
 
+RtmpStream* StreamCenter::getStream(const typeString& key) {
+    RtmpStream* stream = NULL;
+
+    stream = findStream(key);
+    if (NULL != stream) {
+        return stream;
+    } else {
+        stream = creatStream(key);
+
+        return stream;
+    }
+}
+
 RtmpStream* StreamCenter::creatStream(const typeString& key) {
     RtmpStream* stream = NULL;
 
     I_NEW(RtmpStream, stream);
   
     stream->m_avc_id = ++m_avc_id;
+    stream->m_out_delta_ts = 0;
     stream->m_key = key;
     stream->m_publisher = NULL;
 
@@ -35,6 +66,39 @@ RtmpStream* StreamCenter::creatStream(const typeString& key) {
     return stream;
 }
 
+Void StreamCenter::freeStream(RtmpStream* stream) {
+    RtmpUint* player = NULL;
+    typeMapUnitItr itr;
+    typeMapUnit& units = stream->m_players;
+        
+    /* delete publish */
+    if (NULL != stream->m_publisher) { 
+        unregPublisher(stream->m_publisher);
+    }
+
+    /* delete all of players */
+    if (!units.empty()) {
+        for (itr=units.begin(); itr != units.end(); ++itr) {
+            player = itr->second;
+
+            player->m_ctx = NULL;
+            player->m_oper_auth = ENUM_OPER_END;
+        }
+        
+        stream->m_players.clear(); 
+    }
+
+    for (int i=0; i<ENUM_AVC_END; ++i) {
+        if (NULL != stream->m_avc_cache[i]) {
+            CacheCenter::del(stream->m_avc_cache[i]);
+            
+            stream->m_avc_cache[i] = NULL;
+        }
+    } 
+
+    I_FREE(stream);
+}
+
 Void StreamCenter::delStream(const typeString& key) {
     RtmpStream* stream = NULL;
     typeMapStreamItr itr;
@@ -43,15 +107,9 @@ Void StreamCenter::delStream(const typeString& key) {
     if (m_map.end() != itr) {
         stream = itr->second;
         
-        /* delete publish */
-        stream->m_publisher = NULL;
+        m_map.erase(itr);
 
-        /* delete all of players */
-        stream->m_players.clear();
-
-        I_FREE(stream);
-
-        m_map.erase(itr); 
+        freeStream(stream);
     } 
 }
 
@@ -79,68 +137,43 @@ Bool StreamCenter::chkVideoKeyFrame(Byte data[]) {
     }
 }
 
-Void StreamCenter::cacheAvc(RtmpStream* stream,
+Void StreamCenter::cacheAvc(RtmpUint* unit,
     EnumAvcType type, Cache* cache) {
-    
-    if (NULL != stream->m_avc_cache[type]) {
-        CacheCenter::del(stream->m_avc_cache[type]);
-        
-        stream->m_avc_cache[type] = CacheCenter::ref(cache);
-    } else {
-        stream->m_avc_cache[type] = CacheCenter::ref(cache);
-    }
-}
-
-Void StreamCenter::updateAvc(RtmpStream* stream,
-    EnumAvcType type, Cache* cache) {
-    RtmpPkg* pkg_old = NULL;
-    RtmpPkg* pkg_new = NULL; 
-
-    pkg_new = MsgCenter::cast<RtmpPkg>(cache); 
-    
-    if (NULL != stream->m_avc_cache[type]) {
-        pkg_old = MsgCenter::cast<RtmpPkg>(stream->m_avc_cache[type]); 
-        
-        if (pkg_old->m_epoch < pkg_new->m_epoch) {
-            pkg_old->m_epoch = pkg_new->m_epoch;
-        }
-    } 
-}
-
-Void StreamCenter::playCache(RtmpUint* unit) {
     RtmpStream* stream = unit->m_ctx;
 
-    if (NULL != stream->m_avc_cache[ENUM_AVC_META_DATA]) {
-        play(unit, ENUM_MSG_RTMP_TYPE_META_INFO, 
-            stream->m_avc_cache[ENUM_AVC_META_DATA]);
-    }
-
-    if (NULL != stream->m_avc_cache[ENUM_AVC_VEDIO]) {
-        play(unit, ENUM_MSG_RTMP_TYPE_VIDEO,
-            stream->m_avc_cache[ENUM_AVC_VEDIO]);
-    }
-
-    if (NULL != stream->m_avc_cache[ENUM_AVC_AUDIO]) {
-        play(unit, ENUM_MSG_RTMP_TYPE_AUDIO,
-            stream->m_avc_cache[ENUM_AVC_AUDIO]);
+    if (NULL != stream) {
+        if (NULL != stream->m_avc_cache[type]) {
+            CacheCenter::del(stream->m_avc_cache[type]);
+            
+            stream->m_avc_cache[type] = CacheCenter::ref(cache);
+        } else {
+            stream->m_avc_cache[type] = CacheCenter::ref(cache);
+        }
     }
 }
 
-Void StreamCenter::notifyEnd(RtmpStream* stream) {
-    CacheHdr* hdr = NULL;
-    RtmpUint* unit = NULL;
-    typeMapUnitItrConst itr;
-    typeMapUnit& units = stream->m_players;
+Void StreamCenter::playBaseAvc(RtmpUint* unit) {
+    RtmpStream* stream = unit->m_ctx;
 
-    for (itr=units.begin(); itr != units.end(); ++itr) {
-        unit = itr->second;
+    if (NULL != stream) {
+        if (NULL != stream->m_avc_cache[ENUM_AVC_META_DATA]) {
+            sendFlv(unit, stream->m_avc_cache[ENUM_AVC_META_DATA]);
+        }
 
-        hdr = MsgCenter::creatExchMsg(
-            ENUM_MSG_CUSTOMER_NOTIFY_END_STREAM,
-            unit->m_stream_id);
-        
-        unit->m_entity->dispatch(unit->m_entity, hdr);
-    } 
+        if (NULL != stream->m_avc_cache[ENUM_AVC_VEDIO]) {
+            sendFlv(unit, stream->m_avc_cache[ENUM_AVC_VEDIO]);
+        }
+
+        if (NULL != stream->m_avc_cache[ENUM_AVC_AUDIO]) {
+            sendFlv(unit, stream->m_avc_cache[ENUM_AVC_AUDIO]);
+        }
+    }
+}
+
+Void StreamCenter::toString(const Chunk* chunk, typeString& str) {
+    if (0 < chunk->m_size) {
+        str.assign((Char*)chunk->m_data, chunk->m_size);
+    }
 }
 
 Void StreamCenter::publish(RtmpStream* stream, Int32 msg_type, Cache* cache) {
@@ -151,162 +184,250 @@ Void StreamCenter::publish(RtmpStream* stream, Int32 msg_type, Cache* cache) {
     for (itr=units.begin(); itr != units.end(); ++itr) {
         unit = itr->second;
 
-        play(unit, msg_type, cache);
+        /* set sid of the unit */
+        m_proto_center->recv(unit, msg_type, cache);
     }
 }
 
-Void StreamCenter::play(RtmpUint* unit, Int32 msg_type, Cache* cache) {
-    unit->m_entity->onRecv(unit->m_entity, msg_type, cache);
-}
-
-Bool StreamCenter::regPlayer(RtmpUint* unit) {
-    Bool bOk = FALSE;
-    RtmpUint* old = NULL;
-    RtmpStream* stream = NULL;
-    typeString key;
-
-    toString(&unit->m_key, key);
-    
-    stream = findStream(key);
-    if (NULL == stream) {
-        stream = creatStream(key);
-    } 
-    
-    old = findPlayer(stream, unit->m_user_id);
-    if (NULL == old) {
-        stream->m_players[unit->m_user_id] = unit;
-        unit->m_ctx = stream;
-        
-        bOk = TRUE;
-    } else {
-        /* already exists */
-        bOk = FALSE;
-    }
-
-    return bOk;
-}
-
-Bool StreamCenter::unregPlayer(RtmpUint* unit) {
-    Bool bOk = FALSE;
-    RtmpUint* old = NULL;
-    RtmpStream* stream = NULL;
-    typeString key;
-
-    toString(&unit->m_key, key);
-
-    stream = findStream(key);
-    if (NULL != stream) {
-        old = findPlayer(stream, unit->m_user_id);
-        if (NULL != old) {
-            if (old == unit) {
-                delPlayer(stream, unit->m_user_id);
-                unit->m_ctx = NULL;
-                
-                bOk = TRUE;
-            } else {
-                /* there has another play with the same id */
-                unit->m_ctx = NULL;
-                bOk = FALSE;
-            }
-        } else {
-            /* it is not a player of the stream */
-            unit->m_ctx = NULL;
-            bOk = TRUE;
-        }
-    } else {
-        /* the stream doesnot exists */
-        unit->m_ctx = NULL;
-        bOk = TRUE;
-    }
-
-    return bOk;
-}
-
-Bool StreamCenter::regPublisher(RtmpUint* unit) {
-    Bool bOk = FALSE;
-    RtmpStream* stream = NULL;
-    typeString key;
-
-    toString(&unit->m_key, key);
-
-    stream = findStream(key);
-    if (NULL == stream) {
-        stream = creatStream(key);
-    } 
-    
-    if (NULL == stream->m_publisher) {
-        stream->m_publisher = unit;
-        unit->m_ctx = stream;
-        bOk = TRUE;
-    } else {
-        /* already has publisher */
-        bOk = FALSE;
-    }
-
-    return bOk;
-}
-
-Bool StreamCenter::unregPublisher(RtmpUint* unit) {
-    Bool bOk = FALSE;
-    RtmpStream* stream = NULL;
-    typeString key;
-
-    toString(&unit->m_key, key);
-
-    stream = findStream(key);
-    if (NULL != stream) {
-        if (unit == stream->m_publisher) {
-            stream->m_publisher = NULL;
-            unit->m_ctx = NULL;
-            bOk = TRUE;
-        } else {
-            /* it is not the publisher of the stream */
-            unit->m_ctx = NULL;
-            bOk = FALSE;
-        }
-    } else {
-        /* the stream doesnot exists */
-        unit->m_ctx = NULL;
-        bOk = TRUE;
-    }
-
-    return bOk;
-}
-
-RtmpUint* StreamCenter::findPlayer(RtmpStream* stream, Uint32 id) {
+Void StreamCenter::publishCmd(RtmpStream* stream, 
+    Int32 msg_type, Int64 val) {
     RtmpUint* unit = NULL;
     typeMapUnitItrConst itr;
+    typeMapUnit& units = stream->m_players;
 
-    itr = stream->m_players.find(id);
-    if (stream->m_players.end() != itr) {
+    for (itr=units.begin(); itr != units.end(); ++itr) {
         unit = itr->second;
-        
-        return unit;
-    } else {
-        return NULL;
-    }
-}
 
-Bool StreamCenter::delPlayer(RtmpStream* stream, Uint32 id) {
+        m_proto_center->recvCmd(unit->m_parent, msg_type, val);
+    }
+} 
+
+Int32 StreamCenter::regPlayer(RtmpUint* unit) {
+    Int32 ret = 0;
+    Uint32 user_id = 0;
+    typeString strKey;
+    RtmpStream* stream = NULL;
     typeMapUnitItr itr;
 
-    itr = stream->m_players.find(id);
-    if (stream->m_players.end() != itr) {
-        stream->m_players.erase(itr);
+    user_id = unit->m_parent->m_user_id;
+    toString(&unit->m_key, strKey);
+    
+    do {
+        stream = getStream(strKey);
+        if (NULL == stream) {
+            ret = -1;
+            break;
+        } 
+
+        itr = stream->m_players.find(user_id);
+        if (stream->m_players.end() == itr) {
+            stream->m_players[user_id] = unit;
+            unit->m_ctx = stream;
+        } else {
+            /* already exists */
+            ret = -2;
+            break;
+        }
+
+        unit->m_oper_auth = ENUM_OPER_PLAYER;
+    } while (0);
+    
+    return ret;
+}
+
+Int32 StreamCenter::unregPlayer(RtmpUint* unit) {
+    Uint32 user_id = 0;
+    RtmpStream* stream = NULL;
+    typeMapUnitItr itr;
+
+    user_id = unit->m_parent->m_user_id;
+    
+    stream = unit->m_ctx;
+    if (NULL != stream) {
+        stream->m_players.erase(user_id);
+
+        unit->m_ctx = NULL;
+    }
+    
+    unit->m_oper_auth = ENUM_OPER_END;
+    return 0;
+}
+
+Int32 StreamCenter::regPublisher(RtmpUint* unit) {
+    Int32 ret = 0;
+    typeString strKey;
+    RtmpStream* stream = NULL;
+
+    toString(&unit->m_key, strKey);
+    
+    do {
+        stream = getStream(strKey);
+        if (NULL == stream) {
+            ret = -1;
+            break;
+        }
+
+        if (NULL == stream->m_publisher) {
+            stream->m_publisher = unit;
+            unit->m_ctx = stream;
+        } else {
+            ret = -2;
+            break;
+        }
         
-        return TRUE;
-    } else {
-        return FALSE;
+        unit->m_oper_auth = ENUM_OPER_PUBLISHER;
+    } while (0);
+    
+    return ret;
+}
+
+Int32 StreamCenter::unregPublisher(RtmpUint* unit) {
+
+    if (NULL != unit->m_ctx) {
+        unit->m_ctx->m_publisher = NULL;
+        unit->m_ctx = NULL;
+    }
+    
+    unit->m_oper_auth = ENUM_OPER_END;
+    return 0;
+}
+
+RtmpUint* StreamCenter::creatUnit(Uint32 sid, Rtmp* rtmp) {
+    RtmpUint* unit = NULL;
+    
+    I_NEW(RtmpUint, unit);
+
+    CacheCenter::zero(unit, sizeof(RtmpUint));
+
+    unit->m_sid = sid;
+    unit->m_parent = rtmp; 
+    return unit; 
+}
+
+Void StreamCenter::freeUnit(RtmpUint* unit) {
+    if (NULL != unit) {
+        freeAV(&unit->m_stream_name);
+        freeAV(&unit->m_stream_type);
+        freeAV(&unit->m_key);
+        
+        I_FREE(unit);
     }
 }
 
-Uint32 StreamCenter::genUserId() {
-    return ++m_user_id;
+Void StreamCenter::stopUnit(Rtmp* rtmp, Uint32 sid, Bool bSnd) {
+    RtmpUint* unit = NULL;
+    
+    if (0 < sid && sid < RTMP_MAX_SESS_CNT && NULL != rtmp->m_unit[sid]) {
+        unit = rtmp->m_unit[sid];
+        
+        if (ENUM_OPER_PUBLISHER == unit->m_oper_auth) {
+            if (bSnd) {
+                m_proto_center->notifyStop(rtmp, sid,
+                    &av_status_play_stop,
+                    RTMP_STREAM_STOP_DESC); 
+            }
+            
+            unregPublisher(unit);
+        } else if (ENUM_OPER_PLAYER == unit->m_oper_auth) {
+            if (bSnd) {
+                m_proto_center->notifyStop(rtmp, sid,
+                    &av_status_play_stop,
+                    RTMP_STREAM_STOP_DESC); 
+            }
+            
+            unregPlayer(unit);
+        } else {
+            /* do nothing */
+        }
+        
+        freeUnit(unit);
+        rtmp->m_unit[sid] = NULL;
+    } 
 }
 
-Void StreamCenter::toString(const Chunk* chunk, typeString& str) {
-    if (0 < chunk->m_size) {
-        str.assign((Char*)chunk->m_data, chunk->m_size);
+Void StreamCenter::unpublishFC(RtmpStream* stream, Chunk* name) {
+    Cache* cache = 0;
+    RtmpUint* unit = NULL;
+    typeMapUnitItrConst itr;
+    typeMapUnit& units = stream->m_players;
+
+    cache = m_proto_center->genStatus(&av_status_play_end, name, RTMP_STREAM_END_DESC);
+    //cache = m_proto_center->genStatus(&av_netstream_unpublish_notify, name, RTMP_STREAM_UNPUBLISH_DESC);
+
+    for (itr=units.begin(); itr != units.end(); ++itr) {
+        unit = itr->second;
+
+        m_proto_center->sendUsrCtrl(unit->m_parent, ENUM_USR_CTRL_STREAM_END, unit->m_sid);
+        
+        sendInvoke(unit, cache);
+    }
+
+    CacheCenter::del(cache);
+}
+
+Int32 StreamCenter::sendFlv(RtmpUint* unit, Cache* cache) {
+    Int32 ret = 0;
+
+    ret = m_proto_center->send(unit, unit->m_ctx->m_out_delta_ts, cache);
+    return ret;
+}
+
+Int32 StreamCenter::sendInvoke(RtmpUint* unit, Cache* cache) {
+    Int32 ret = 0;
+
+    ret = m_proto_center->send(unit, 0, cache);
+    return ret;
+}
+
+Void StreamCenter::updateOutTs(RtmpUint* unit) {
+    Uint32 cid = 0;
+    ChnOutput* chn = NULL;
+    RtmpStream* ctx = unit->m_ctx;
+    Rtmp* rtmp = unit->m_parent;
+
+    /* check audio out chn */
+    cid = toCid(ENUM_MSG_RTMP_TYPE_AUDIO, unit->m_sid);
+    chn = rtmp->m_chnnOut[cid];
+    if (NULL != chn && ctx->m_out_delta_ts < chn->m_epoch) {
+        ctx->m_out_delta_ts = chn->m_epoch;
+    }
+
+    /* check vidio out chn */
+    cid = toCid(ENUM_MSG_RTMP_TYPE_VIDEO, unit->m_sid);
+    chn = rtmp->m_chnnOut[cid];
+    if (NULL != chn && ctx->m_out_delta_ts < chn->m_epoch) {
+        ctx->m_out_delta_ts = chn->m_epoch;
+    }
+}
+
+Void StreamCenter::publishFC(RtmpStream* stream, Chunk* name) {
+    Cache* cache = 0;
+    RtmpUint* unit = NULL;
+    typeMapUnitItrConst itr;
+    typeMapUnit& units = stream->m_players;
+
+    cache = m_proto_center->genStatus(&av_netstream_publish_notify, name,
+        RTMP_STREAM_PUBLISH_DESC);
+    
+    for (itr=units.begin(); itr != units.end(); ++itr) {
+        unit = itr->second;
+
+        updateOutTs(unit);
+
+        m_proto_center->sendUsrCtrl(unit->m_parent, 
+            ENUM_USR_CTRL_STREAM_BEGIN, unit->m_sid);
+        
+        sendInvoke(unit, cache);
+    }
+
+    CacheCenter::del(cache);
+}
+
+Void StreamCenter::stopPublisher(RtmpStream* stream) {
+    RtmpUint* unit = stream->m_publisher;
+    
+    if (NULL != unit) {
+        stopUnit(unit->m_parent, unit->m_sid, TRUE);
     }
 }
 

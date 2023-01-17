@@ -21,8 +21,7 @@ struct MsgSend {
 };
 
 struct MsgComm {
-    Int32 m_size;
-    Byte  m_data[0];
+    Uint32 m_sid;   // used by flv data msg
 };
 
 /******* end ********/
@@ -46,10 +45,7 @@ enum EnumMsgType {
     ENUM_MSG_RTMP_TYPE_INVOKE,
     
     ENUM_MSG_RTMP_TYPE_APP,
-    
-    ENUM_MSG_CUSTOMER_NOTIFY_END_STREAM,
-    
-
+  
     ENUM_MSG_TYPE_COMMON,
     ENUM_MSG_TYPE_SEND,
 

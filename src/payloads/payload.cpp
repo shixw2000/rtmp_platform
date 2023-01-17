@@ -19,6 +19,7 @@ Bool creatAV(const Chunk* src, Chunk* dst) {
         dst->m_data = (Byte*)malloc(src->m_size);
         if (NULL != dst->m_data) {
             memcpy(dst->m_data, src->m_data, src->m_size);
+            dst->m_data[src->m_size] = '\0';
             dst->m_size = src->m_size;
             
             return TRUE;
@@ -372,12 +373,12 @@ Void AmfPayload::addPropAny(AMFObject* obj, const Chunk* name,
     addProp(obj, &prop);
 }
 
-Bool AmfPayload::delPropByIndex(AMFObject* obj, Int32 index) {
+Bool AmfPayload::delProp(AMFObject* obj, Int32 index) {
     Int32 n = 0;
     
     if (obj->m_num > index && 0 <= index) {
         /* release the resource of prop */
-        resetProp(&obj->m_props[index]);
+        freeProp(&obj->m_props[index]);
         
         --obj->m_num;
         if (index < obj->m_num) {
@@ -528,9 +529,17 @@ AMFObject* AmfPayload::findPropObj(AMFObject* obj, const Chunk* name) {
 }
 
 Void AmfPayload::resetObj(AMFObject* obj) {
+    if (0 < obj->m_num) { 
+        free(obj->m_props); 
+        obj->m_props = NULL;
+        obj->m_num = 0;
+    }
+}
+
+Void AmfPayload::freeObj(AMFObject* obj) {
     if (0 < obj->m_num) {
         for (int i=0; i<obj->m_num; ++i) {
-            resetProp(&obj->m_props[i]);
+            freeProp(&obj->m_props[i]);
         }
         
         free(obj->m_props); 
@@ -539,10 +548,10 @@ Void AmfPayload::resetObj(AMFObject* obj) {
     }
 }
 
-Void AmfPayload::resetProp(AMFObjectProperty* prop) {
+Void AmfPayload::freeProp(AMFObjectProperty* prop) {
     if (AMF_OBJECT == prop->m_type || AMF_ECMA_ARRAY == prop->m_type
         || AMF_STRICT_ARRAY == prop->m_type) {
-        resetObj(&prop->p_vu.m_object);
+        freeObj(&prop->p_vu.m_object);
     } else {
         prop->p_vu.m_val.m_size = 0;
         prop->p_vu.m_val.m_data = NULL;

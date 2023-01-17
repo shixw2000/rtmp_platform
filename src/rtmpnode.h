@@ -15,33 +15,33 @@ struct RtmpNode {
     Int32 (*onAccept)(RtmpNode* _this);
     Int32 (*onConnOk)(RtmpNode* _this);
     Void (*onConnFail)(RtmpNode* _this); 
-    
-    Int32 (*dealCtrl)(RtmpNode* _this, Cache* cache);
 
-    Int32 (*onRecv)(RtmpNode* _this, Int32 msg_type, Cache* cache);
+    /* begin receive functions */
+    Int32 (*recv)(RtmpNode* _this, Int32 msg_type, Uint32 sid, Cache* cache);
 
-    Int32 (*dispatch)(RtmpNode* _this, CacheHdr* hdr);
+    Int32 (*recvCmd)(RtmpNode* _this, Int32 msg_type, Int64 val);
+
+    /* end receive functions */
     
-    /* add ref of the cache */
-    Int32 (*handshake)(RtmpNode* _this, Cache* cache);
     
-    Int32 (*sendPayload)(RtmpNode* _this, Uint32 epoch, Uint32 stream_id,
+    /* begin send functions */
+    Int32 (*sendHandshake)(RtmpNode* _this, Cache* cache);
+    
+    Int32 (*sendPayload)(RtmpNode* _this, Uint32 sid,
         Uint32 rtmp_type, const Chunk* chunk);
     
-    Int32 (*sendPkg)(RtmpNode* _this, Uint32 stream_id, Cache* cache); 
+    Int32 (*sendPkg)(RtmpNode* _this, Uint32 sid, Uint32 delta_ts, Cache* payload); 
+
+    /* end send functions */
 };
 
 extern ChnInput* creatChnIn(Uint32 cid);
 extern Void freeChnIn(ChnInput* chn);
 
 extern Uint32 toMsgType(Uint32 rtmp_type);
-extern Uint32 toCid(Uint32 type, Uint32 stream_id);
+extern Uint32 toCid(Uint32 msg_type, Uint32 sid);
 
-extern Cache* creatPkg(Uint32 epoch, Uint32 stream_id, 
-    Uint32 rtmp_type, Uint32 payload_size);
-
-extern RtmpUint* creatUnit(Uint32 userId, RtmpNode* node);
-extern Void freeUnit(RtmpUint* unit);
+extern Cache* creatPkg(Uint32 rtmp_type, Uint32 payload_size);
 
 RtmpNode* creatRtmpNode(Int32 fd, Director* director);
 

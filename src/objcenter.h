@@ -34,7 +34,7 @@ public:
     EnumSockRet readSock(NodeBase* node, callback cb);
     EnumSockRet writeSock(NodeBase* node);
 
-    Int32 parseRtmp(RtmpNode* node, Rtmp* rtmp, Byte* data, Int32 len);
+    Int32 parseRtmp(Rtmp* rtmp, Byte* data, Int32 len);
 
     inline RtmpHandler* getRtmpHandler() const {
         return m_handler;

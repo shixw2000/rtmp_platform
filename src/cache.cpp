@@ -86,10 +86,6 @@ Int32 CacheCenter::getType(CacheHdr* hdr) {
     return hdr->m_type;
 }
 
-Void CacheCenter::setType(CacheHdr* hdr, Int32 type) {
-    hdr->m_type = type;
-}
-
 Cache* CacheCenter::getCache(CacheHdr* hdr) {
     return hdr->m_cache;
 }
