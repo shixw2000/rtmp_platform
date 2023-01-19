@@ -32,8 +32,6 @@ public:
     static Bool genStreamKey(const Chunk* app,
         const Chunk* name, Chunk* key);
 
-    static Bool chkFlvData(Uint32 msg_type);
-
     static Bool isAvcSid(Rtmp* rtmp, Uint32 sid); 
     
     Int32 dealRtmp(Rtmp* rtmp, CacheHdr* hdr);

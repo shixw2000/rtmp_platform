@@ -6,29 +6,42 @@
 
 
 struct Cache;
-class AmfPayload;
 
 class RtmpProto {
+    template<AMFDataType arg_type, typename T>
+    Cache* genCall(const Chunk* call, const double* txn, 
+        const AMFObject* info, const T* arg);
+    
 public:
     explicit RtmpProto(AmfPayload* amf) : m_amf(amf) {}
     
     Cache* genStatus(const Chunk* status, const Chunk* path,
         const Char* desc);
 
-    Cache* genResult(const double* txn, const AMFObject* info,
-        AMFDataType arg_type, const Void* arg); 
-
     Int32 sendStatus(Rtmp* rtmp, Uint32 sid, const Chunk* status, 
         const Chunk* path, const Char* desc);
 
-    Int32 sendResult(Rtmp* rtmp, Uint32 sid, const double* txn, 
-        const AMFObject* info = NULL,
-        AMFDataType arg_type = AMF_INVALID, const Void* arg = NULL);
-
+    template<AMFDataType arg_type, typename T>
     Int32 sendCall(Rtmp* rtmp, Uint32 sid, 
         const Chunk* call, const double* txn, 
-        const AMFObject* info = NULL,
-        AMFDataType arg_type = AMF_INVALID, const Void* arg = NULL);
+        const AMFObject* info = NULL, const T* arg = NULL) {
+        Int32 ret = 0;
+        Cache* cache = NULL;
+
+        cache = genCall<arg_type, T>(call, txn, info, arg); 
+        ret = sendCache(rtmp, sid, 0, cache);
+        return ret;
+    }
+
+    template<AMFDataType arg_type, typename T>
+    Int32 sendResult(Rtmp* rtmp, Uint32 sid, const double* txn, 
+        const AMFObject* info = NULL, const T* arg = NULL) {
+        Int32 ret = 0;
+
+        ret = sendCall<arg_type, T>(rtmp, sid, &av__result, 
+            txn, info, arg);
+        return ret;
+    }
 
     /* the rtmp receive the internal msg and then start to deal it */
     Int32 recvCmd(Rtmp* rtmp, Int32 msg_type, Int64 val);
@@ -51,11 +64,9 @@ public:
         const Char* desc);
 
 private:
-    Int32 sendCtrl(Rtmp* rtmp, Uint32 rtmp_type, const Chunk* chunk);
-    
-    Cache* genCall(const Chunk* call, const double* txn, 
-        const AMFObject* info, AMFDataType arg_type, 
-        const Void* arg);
+    Int32 sendCtrl(Rtmp* rtmp, Uint32 rtmp_type, const Chunk* chunk); 
+
+    Int32 sendCache(Rtmp* rtmp, Uint32 sid, Uint32 delta_ts, Cache* cache);
 
 private:
     AmfPayload* m_amf;    

@@ -18,6 +18,15 @@ class Sender;
 class Dealer;
 class Receiver;
 
+enum EnumListenerType {
+    ENUM_LISTENER_NULL = 0,
+
+    ENUM_LISTENER_SOCK,
+    ENUM_LISTENER_RTMP,
+
+    ENUM_LISTENER_END
+};
+
 class Director : public TaskWorker {
 public:
     explicit Director(int capacity);
@@ -64,7 +73,7 @@ public:
     Void registTask(NodeBase* node, Int32 ev);
     Void closeTask(NodeBase* node, Int32 errcode);
 
-    Int32 addListener(const Char szip[], Int32 port);
+    Int32 addListener(EnumListenerType type, const Char szip[], Int32 port);
     
 protected:
     virtual int setup();

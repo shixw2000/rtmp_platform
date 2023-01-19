@@ -83,7 +83,7 @@ static Void genHeader(Uint32 sid, Uint32 delta_ts, RtmpPkg* pkg,
     /* adust cid by msg_type and sid */
     header->m_cid = toCid(pkg->m_msg_type, sid);
     
-    if (0 < delta_ts && RtmpHandler::chkFlvData(pkg->m_msg_type)) {
+    if (0 < delta_ts && chkFlvData(pkg->m_msg_type)) {
         header->m_epoch += delta_ts;
     }
 
@@ -360,6 +360,7 @@ METHOD(RtmpNode, sendPkg, Int32, RtmpNodePriv* _this,
     Int32 ret = 0;
     Int32 hdr_size = 0;
     Int32 total = 0;
+    Bool is_flv = FALSE;
     Byte ch = 0; 
     CacheHdr* hdr = NULL;
     MsgSend* msg = NULL; 
@@ -413,24 +414,27 @@ METHOD(RtmpNode, sendPkg, Int32, RtmpNodePriv* _this,
         hdr_size = 1;
     } while (total < pkg->m_size && 0 == ret);
 
-    LOG_INFO("send_pkg| ret=%d| user_id=%u| fd=%d| cid=%u| fmt=%u|"
-        " epoch=%u| timestamp=%u|"
-        " rtmp_type=%u| payload_size=%u|"
-        " sid=%u| pkg_sid=%u|"
-        " chunk_size_out=%d|",
-        ret, rtmp->m_user_id,
-        rtmp->m_fd, 
-        header.m_cid,
-        header.m_fmt,
+    is_flv = chkFlvData(pkg->m_msg_type);
+    if (!is_flv || g_conf.m_prnt_flv) {
+        LOG_INFO("send_pkg| ret=%d| user_id=%u| fd=%d| cid=%u| fmt=%u|"
+            " epoch=%u| timestamp=%u|"
+            " rtmp_type=%u| payload_size=%u|"
+            " sid=%u| pkg_sid=%u|"
+            " chunk_size_out=%d|",
+            ret, rtmp->m_user_id,
+            rtmp->m_fd, 
+            header.m_cid,
+            header.m_fmt,
 
-        header.m_epoch,
-        header.m_timestamp,
-        header.m_rtmp_type,
-        header.m_pld_size,
-        
-        header.m_sid, 
-        pkg->m_sid,  
-        rtmp->m_chunkSizeOut);
+            header.m_epoch,
+            header.m_timestamp,
+            header.m_rtmp_type,
+            header.m_pld_size,
+            
+            header.m_sid, 
+            pkg->m_sid,  
+            rtmp->m_chunkSizeOut);
+        }
     
     return ret;
 }
@@ -451,20 +455,46 @@ METHOD(RtmpNode, recv, Int32, RtmpNodePriv* _this,
     Int32 ret = 0;
     CacheHdr* hdr = NULL;
     MsgComm* msg = NULL;
+    RtmpPkg* pkg = NULL;
+    Rtmp* rtmp = &_this->m_rtmp;
 
     if (ENUM_MSG_RTMP_TYPE_CTRL != msg_type) { 
         hdr = MsgCenter::creatMsg<MsgComm>(msg_type);
         msg = MsgCenter::body<MsgComm>(hdr);
 
-        msg->m_sid = sid;
+        msg->m_sid = sid; 
         
-        /* set cache and add ref */
-        CacheCenter::setCache(hdr, CacheCenter::ref(cache));
-        
-        ret = _this->m_director->dispatch(&_this->m_pub.m_base, hdr); 
+        if (ENUM_MSG_RTMP_TYPE_UNKNOWN != msg_type) { 
+            
+            /* set cache and add ref */
+            CacheCenter::setCache(hdr, CacheCenter::ref(cache));
+            
+            ret = _this->m_director->dispatch(&_this->m_pub.m_base, hdr); 
+        } else {
+            pkg = MsgCenter::cast<RtmpPkg>(cache); 
+            
+            LOG_WARN("recv_msg| user_id=%u| fd=%d|"
+                " epoch=%u| timestamp=%u|"
+                " rtmp_type=%u| payload_size=%u|"
+                " sid=%u| pkg_sid=%u|"
+                " chunk_size_in=%d|",
+                rtmp->m_user_id,
+                rtmp->m_fd, 
+
+                pkg->m_epoch,
+                pkg->m_timestamp,
+                pkg->m_rtmp_type,
+                pkg->m_size,
+                
+                sid, 
+                pkg->m_sid,  
+                rtmp->m_chunkSizeIn);
+
+            ret = -1;
+        }
     } else {
         ret = _this->m_handler->dealCtrlMsg(&_this->m_rtmp, cache); 
-    }
+    } 
     
     return ret;
 }
@@ -532,7 +562,7 @@ Uint32 toMsgType(Uint32 rtmp_type) {
     } else if (RTMP_MSG_TYPE_META_INFO == rtmp_type) {
         msg_type = ENUM_MSG_RTMP_TYPE_META_INFO;
     } else {
-        msg_type = ENUM_MSG_RTMP_TYPE_APP;
+        msg_type = ENUM_MSG_RTMP_TYPE_UNKNOWN;
     }
 
     return msg_type;
@@ -572,6 +602,16 @@ Uint32 toCid(Uint32 msg_type, Uint32 sid) {
     return cid;
 }
 
+Bool chkFlvData(Uint32 msg_type) {
+    if (ENUM_MSG_RTMP_TYPE_AUDIO == msg_type
+        || ENUM_MSG_RTMP_TYPE_VIDEO == msg_type
+        || ENUM_MSG_RTMP_TYPE_META_INFO == msg_type) {
+        return TRUE;
+    } else {
+        return FALSE;
+    }
+}
+
 Cache* creatPkg(Uint32 rtmp_type, Uint32 payload_size) {
     Cache* cache = NULL;
     RtmpPkg* pkg = NULL;
@@ -588,6 +628,9 @@ Cache* creatPkg(Uint32 rtmp_type, Uint32 payload_size) {
     return cache;
 }
 
+Bool chkRtmpVer(Byte ver) {
+    return RTMP_DEF_HANDSHAKE_VER == ver;
+}
 
 RtmpNode* creatRtmpNode(Int32 fd, Director* director) {
     RtmpNodePriv* _this = NULL;

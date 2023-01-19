@@ -172,7 +172,11 @@ Int32 HandShake::parseReq(const Void* key, Int32 keyLen,
         parser.parse32(&handshake->m_peerMark);
         return 0;
     } else {
-        return -1;
+        handshake->m_peerTs = 0;
+        handshake->m_peerMark = 0;
+        LOG_WARN("parse_handshake_req| msg=verify req error, but ignore|");
+        
+        return 0;
     }
 }
 

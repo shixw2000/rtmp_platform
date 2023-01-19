@@ -152,6 +152,18 @@ Void StreamCenter::cacheAvc(RtmpUint* unit,
     }
 }
 
+Void StreamCenter::clearAvc(RtmpStream* stream) {
+    if (NULL != stream) {
+        for (Int32 i=0; i<ENUM_AVC_END; ++i) {
+            if (NULL != stream->m_avc_cache[i]) {
+                CacheCenter::del(stream->m_avc_cache[i]);
+
+                stream->m_avc_cache[i] = NULL;
+            } 
+        }
+    }
+}
+
 Void StreamCenter::playBaseAvc(RtmpUint* unit) {
     RtmpStream* stream = unit->m_ctx;
 
@@ -350,19 +362,21 @@ Void StreamCenter::unpublishFC(RtmpStream* stream, Chunk* name) {
     RtmpUint* unit = NULL;
     typeMapUnitItrConst itr;
     typeMapUnit& units = stream->m_players;
-
+    
     cache = m_proto_center->genStatus(&av_status_play_end, name, RTMP_STREAM_END_DESC);
     //cache = m_proto_center->genStatus(&av_netstream_unpublish_notify, name, RTMP_STREAM_UNPUBLISH_DESC);
 
     for (itr=units.begin(); itr != units.end(); ++itr) {
-        unit = itr->second;
-
-        m_proto_center->sendUsrCtrl(unit->m_parent, ENUM_USR_CTRL_STREAM_END, unit->m_sid);
+        unit = itr->second; 
         
         sendInvoke(unit, cache);
+        m_proto_center->sendUsrCtrl(unit->m_parent,
+            ENUM_USR_CTRL_STREAM_END, unit->m_sid); 
     }
 
     CacheCenter::del(cache);
+
+    clearAvc(stream);
 }
 
 Int32 StreamCenter::sendFlv(RtmpUint* unit, Cache* cache) {

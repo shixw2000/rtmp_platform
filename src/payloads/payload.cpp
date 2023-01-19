@@ -3,6 +3,7 @@
 #include"globaltype.h"
 #include"payload.h"
 #include"analyser.h"
+#include"cache.h"
 
 
 Bool matchAV(const Chunk* o1, const Chunk* o2) {
@@ -331,9 +332,12 @@ Void AmfPayload::addProp(AMFObject* obj, const AMFObjectProperty *prop) {
     memcpy(&obj->m_props[obj->m_num++], prop, sizeof(AMFObjectProperty)); 
 }
 
-Void AmfPayload::addPropAny(AMFObject* obj, const Chunk* name,
-    AMFDataType type, const Void* any) {
+template<AMFDataType type, typename T>
+Void AmfPayload::addPropAny(AMFObject* obj, 
+    const Chunk* name, const T* any) {
     AMFObjectProperty prop = AMF_PROP_INVALID;
+    
+    CacheCenter::zero(&prop, sizeof(prop));
     
     if (NULL != name) {
         prop.m_name = *name;
@@ -343,34 +347,41 @@ Void AmfPayload::addPropAny(AMFObject* obj, const Chunk* name,
     }
 
     prop.m_type = type;
-
-    switch (type) {
-    case AMF_NUMBER:
-        prop.p_vu.m_number = to_value<double>(any);
-        break;
-
-    case AMF_BOOLEAN:
-        prop.p_vu.m_n = to_value<Int32>(any);
-        break;
-
-    case AMF_STRING:
-        prop.p_vu.m_val = to_value<Chunk>(any);
-        break;
-        
-    case AMF_OBJECT:
-        prop.p_vu.m_object = to_value<AMFObject>(any);
-        break;
-
-    case AMF_NULL:
-    case AMF_UNDEFINED:
-        break;
-
-    default:
-        prop.m_type = AMF_INVALID;
-        break;
-    }
-    
+    CacheCenter::copy(&prop.p_vu, any, sizeof(T));
     addProp(obj, &prop);
+}
+
+template Void AmfPayload::addPropAny<AMF_NUMBER, double>(AMFObject* obj,
+    const Chunk* name, const double* any);
+template Void AmfPayload::addPropAny<AMF_BOOLEAN, Int32>(AMFObject* obj,
+    const Chunk* name, const Int32* any);
+template Void AmfPayload::addPropAny<AMF_STRING, Chunk>(AMFObject* obj,
+    const Chunk* name, const Chunk* any);
+template Void AmfPayload::addPropAny<AMF_OBJECT, AMFObject>(AMFObject* obj,
+    const Chunk* name, const AMFObject* any);
+
+template<>
+Void AmfPayload::addPropAny<AMF_NULL, Void>(AMFObject* obj, 
+    const Chunk* name, const Void*) {
+    AMFObjectProperty prop = AMF_PROP_INVALID;
+    
+    CacheCenter::zero(&prop, sizeof(prop));
+    
+    if (NULL != name) {
+        prop.m_name = *name;
+    } else {
+        prop.m_name.m_size = 0;
+        prop.m_name.m_data = NULL;
+    }
+
+    prop.m_type = AMF_NULL;
+    addProp(obj, &prop);
+}
+
+template<>
+Void AmfPayload::addPropAny<AMF_INVALID, Void>(AMFObject*, 
+    const Chunk*, const Void* ) {
+    /* do nothing */
 }
 
 Bool AmfPayload::delProp(AMFObject* obj, Int32 index) {

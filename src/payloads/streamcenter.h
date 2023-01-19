@@ -53,6 +53,8 @@ public:
     
     Void playBaseAvc(RtmpUint* unit);
     Void cacheAvc(RtmpUint* unit, EnumAvcType type, Cache* cache); 
+    
+    Void clearAvc(RtmpStream* stream);
   
     /* the stream publish the msg to all of its players, 
         * then the players may start to deal it */

@@ -139,13 +139,7 @@ class Parser;
 class Builder;
 
 class AmfPayload {
-public:
-    template<typename T>
-    T to_value(const Void* p) {
-        const T* pt = (const T*)p;
-        return *pt;
-    }
-    
+public: 
     Void dump(const Char* promt, const AMFObject* obj, Int32 indent = 0);
 
     Bool encode(AMFObject* obj, Chunk* chunk);
@@ -165,8 +159,9 @@ public:
     Bool decodeProp(Parser* parser, AMFObjectProperty *prop, Bool hasName);
 
     Void addProp(AMFObject* obj, const AMFObjectProperty *prop);
-    Void addPropAny(AMFObject* obj, const Chunk* name,
-        AMFDataType type, const Void* any);
+
+    template<AMFDataType type, typename T>
+    Void addPropAny(AMFObject* obj, const Chunk* name, const T* any);
 
     Bool delProp(AMFObject* obj, Int32 index);
     
@@ -205,6 +200,8 @@ public:
     Void freeProp(AMFObjectProperty* prop);
 
     Int32 peekString(Byte* data, Int32 len, Chunk* chunk);
+
+private:
 
 private:
     static const Int32 MAX_AMF_BUFFER_SIZE = 0x10000;

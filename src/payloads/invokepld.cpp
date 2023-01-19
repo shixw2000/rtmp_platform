@@ -312,7 +312,7 @@ Int32 RtmpHandler::dealInvoke(Rtmp* rtmp, CacheHdr* hdr) {
             } else if (matchAV(&av_createStream, method)) {
                 ret = dealCreatStream(rtmp, &obj);
             } else if (matchAV(&av_getStreamLength, method)) {
-                ret = m_proto_center->sendResult(rtmp, RTMP_INVALID_SID, txn);
+                ret = m_proto_center->sendResult<AMF_INVALID, Void>(rtmp, RTMP_INVALID_SID, txn);
             } else if (matchAV(&av_play, method)) {
                 ret = dealPlay(rtmp, sid, pkg_sid, &obj);
             } else if (matchAV(&av_publish, method)) {
@@ -328,7 +328,7 @@ Int32 RtmpHandler::dealInvoke(Rtmp* rtmp, CacheHdr* hdr) {
             } else if (matchAV(&av_releaseStream, method)) {
                 ret = dealReleaseStream(rtmp, sid, pkg_sid, &obj);
             } else if (matchAV(&av__checkbw, method)) {
-                ret = m_proto_center->sendResult(rtmp, RTMP_INVALID_SID, txn);
+                ret = m_proto_center->sendResult<AMF_INVALID, Void>(rtmp, RTMP_INVALID_SID, txn);
             } else {                
                 LOG_INFO("deal_invoke| user_id=%u| sid=%u| pkg_sid=%u|"
                     " method=%*.s| msg=ok|",
@@ -400,33 +400,33 @@ Int32 RtmpHandler::dealConn(Rtmp* rtmp, AMFObject* obj) {
         rtmp->m_user_id = ++m_user_id;
             
         /* set bandwidth */
-        m_proto_center->sendServBw(rtmp, RTMP_DEF_WIND_SIZE);
-        m_proto_center->sendCliBw(rtmp, RTMP_DEF_WIND_SIZE, 2);
+        m_proto_center->sendServBw(rtmp, g_conf.m_window_size);
+        m_proto_center->sendCliBw(rtmp, g_conf.m_window_size, 2);
 
-        m_amf->addPropAny(&infoObj, &av_fmsVer, AMF_STRING, &av_def_fmsVer);
+        m_amf->addPropAny<AMF_STRING, Chunk>(&infoObj, &av_fmsVer, &av_def_fmsVer);
 
         f = 31.0;
-        m_amf->addPropAny(&infoObj, &av_capabilities, AMF_NUMBER, &f);
+        m_amf->addPropAny<AMF_NUMBER, double>(&infoObj, &av_capabilities, &f);
 
         f = 1.0;
-        m_amf->addPropAny(&infoObj, &av_mode, AMF_NUMBER, &f); 
+        m_amf->addPropAny<AMF_NUMBER, double>(&infoObj, &av_mode, &f); 
 
-        m_amf->addPropAny(&argObj, &av_level, AMF_STRING, &av_status_level_ok);
-        m_amf->addPropAny(&argObj, &av_code, AMF_STRING, &av_status_conn_ok);
-        m_amf->addPropAny(&argObj, &av_description, AMF_STRING, &av_status_conn_des);
+        m_amf->addPropAny<AMF_STRING, Chunk>(&argObj, &av_level, &av_status_level_ok);
+        m_amf->addPropAny<AMF_STRING, Chunk>(&argObj, &av_code, &av_status_conn_ok);
+        m_amf->addPropAny<AMF_STRING, Chunk>(&argObj, &av_description, &av_status_conn_des);
 
         f = rtmp->m_encoding;
-        m_amf->addPropAny(&argObj, &av_objectEncoding, AMF_NUMBER, &f);
+        m_amf->addPropAny<AMF_NUMBER, double>(&argObj, &av_objectEncoding, &f);
 
-        m_amf->addPropAny(&extObj, &av_fms_version, AMF_STRING, &av_def_fms_version);
+        m_amf->addPropAny<AMF_STRING, Chunk>(&extObj, &av_fms_version, &av_def_fms_version);
         
-        m_amf->addPropAny(&argObj, &av_fms_data, AMF_OBJECT, &extObj); 
+        m_amf->addPropAny<AMF_OBJECT, AMFObject>(&argObj, &av_fms_data, &extObj); 
 
-        m_proto_center->sendResult(rtmp, RTMP_INVALID_SID, txn,
-            &infoObj, AMF_OBJECT, &argObj); 
+        m_proto_center->sendResult<AMF_OBJECT, AMFObject>(rtmp, 
+            RTMP_INVALID_SID, txn, &infoObj, &argObj); 
         
-        m_proto_center->sendCall(rtmp, RTMP_INVALID_SID, &av_onBWDone, 
-            &AMF_ZERO_DOUBLE); 
+        m_proto_center->sendCall<AMF_INVALID, Void>(rtmp, 
+            RTMP_INVALID_SID, &av_onBWDone, &AMF_ZERO_DOUBLE); 
         
         rtmp->m_status = ENUM_RTMP_STATUS_CONNECTED; 
     } while (0);
@@ -483,11 +483,11 @@ Int32 RtmpHandler::dealCreatStream(Rtmp* rtmp, AMFObject* obj) {
         }
         
         /* set larger chunk */
-        m_proto_center->sendChunkSize(rtmp, RTMP_DEF_CHUNK_SIZE); 
+        m_proto_center->sendChunkSize(rtmp, g_conf.m_chunk_size); 
         
         f = sid;
-        m_proto_center->sendResult(rtmp, RTMP_INVALID_SID, txn,
-            NULL, AMF_NUMBER, &f);         
+        m_proto_center->sendResult<AMF_NUMBER, double>(rtmp, 
+            RTMP_INVALID_SID, txn, NULL, &f);         
 
         LOG_INFO("deal_creat_stream| txn=%.2f| user_id=%u|"
             " sid=%u| msg=ok|", 
@@ -507,16 +507,6 @@ Bool RtmpHandler::genStreamKey(const Chunk* app,
 
     bOk = joinAV(app, name, key, DEF_CHUNK_DELIM);
     return bOk;
-}
-
-Bool RtmpHandler::chkFlvData(Uint32 msg_type) {
-    if (ENUM_MSG_RTMP_TYPE_AUDIO == msg_type
-        || ENUM_MSG_RTMP_TYPE_VIDEO == msg_type
-        || ENUM_MSG_RTMP_TYPE_META_INFO == msg_type) {
-        return TRUE;
-    } else {
-        return FALSE;
-    }
 }
 
 Bool RtmpHandler::isAvcSid(Rtmp* rtmp, Uint32 sid) {
@@ -735,6 +725,7 @@ Int32 RtmpHandler::dealFCPublish(Rtmp* rtmp, Uint32 sid,
             break;
         }
 
+        m_proto_center->sendCall<AMF_INVALID, Void>(rtmp, sid, &av_onFCPublish, &AMF_ZERO_DOUBLE);
         m_stream_center->publishFC(stream, path);  
     } while (0);
 
@@ -882,16 +873,16 @@ Int32 RtmpHandler::dealMetaData(Rtmp* rtmp, CacheHdr* hdr) {
 
                 LOG_INFO("deal_meta_data| skip=%d|", pkg->m_skip);
             } 
-        }
 
-        bOk = m_amf->decode(&obj, pkg->m_payload + pkg->m_skip, 
-            pkg->m_size - pkg->m_skip);
-        if (!bOk) { 
-            ret = -2;
-            break;
-        }
+            bOk = m_amf->decode(&obj, pkg->m_payload + pkg->m_skip, 
+                pkg->m_size - pkg->m_skip);
+            if (!bOk) { 
+                ret = -2;
+                break;
+            }
 
-        m_amf->dump("deal_meta_data", &obj); 
+            m_amf->dump("deal_meta_data", &obj); 
+        }
 
         /* go to flv data handler */
         ret = dealFlvData(rtmp, hdr);

@@ -20,7 +20,8 @@ private:
     Bool fill(RtmpChn* chn, Chunk* src);
     
     Int32 readInit(Rtmp* rtmp, Chunk* chunk);
-    Int32 readC0C1(Rtmp* rtmp, Chunk* chunk);
+    Int32 readC0(Rtmp* rtmp, Chunk* chunk);
+    Int32 readC1(Rtmp* rtmp, Chunk* chunk);
     Int32 readC2(Rtmp* rtmp, Chunk* chunk); 
     
     Int32 readBasic(Rtmp* rtmp, Chunk* chunk);

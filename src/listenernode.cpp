@@ -7,13 +7,6 @@
 #include"rtmpnode.h"
 
 
-struct ListenerNodePriv {
-    ListenerNode m_pub;
-
-    Director* m_director;
-    Int32 m_listener_fd;
-};
-
 static Void acceptSock(Int32 listener_fd, Director* director) { 
     Int32 ret = 0;
     Int32 newfd = -1;
@@ -90,31 +83,26 @@ static Void acceptRtmp(Int32 listener_fd, Director* director) {
     }
 }
 
-METHOD(NodeBase, getFd, Int32, ListenerNodePriv* _this) {
+
+struct RtmpListenerPriv {
+    ListenerNode m_pub;
+
+    Director* m_director;
+    Int32 m_listener_fd;
+};
+
+METHOD(NodeBase, rtmp_getFd, Int32, RtmpListenerPriv* _this) {
     return _this->m_listener_fd;
 }
 
-METHOD(NodeBase, readNode, EnumSockRet, ListenerNodePriv* _this) {
-	//acceptSock(_this->m_listener_fd, _this->m_director);
+METHOD(NodeBase, rtmp_readNode, EnumSockRet, RtmpListenerPriv* _this) {
     acceptRtmp(_this->m_listener_fd, _this->m_director);
 
     return ENUM_SOCK_MARK_FINISH;
 }
 
-METHOD(NodeBase, dealMsg, Int32, ListenerNodePriv* , CacheHdr* ) {
-    
-    return ENUM_ERR_OK;
-}
 
-METHOD(NodeBase, dealCmd, Void, ListenerNodePriv* , CacheHdr* ) {
-    
-    return;
-}
-
-METHOD(NodeBase, onClose, Void, ListenerNodePriv* ) {
-}
-
-METHOD(NodeBase, destroy, Void, ListenerNodePriv* _this) {
+METHOD(NodeBase, rtmp_destroy, Void, RtmpListenerPriv* _this) {
     
     ObjCenter::finishNode(&_this->m_pub.m_base); 
 
@@ -122,10 +110,10 @@ METHOD(NodeBase, destroy, Void, ListenerNodePriv* _this) {
     I_FREE(_this);
 }
 
-ListenerNode* creatListenerNode(Int32 fd, Director* director) {
-    ListenerNodePriv* _this = NULL;
+ListenerNode* creatRtmpListener(Int32 fd, Director* director) {
+    RtmpListenerPriv* _this = NULL;
 
-    I_NEW(ListenerNodePriv, _this);
+    I_NEW(RtmpListenerPriv, _this);
 
     ObjCenter::initNode(&_this->m_pub.m_base);
 
@@ -134,14 +122,56 @@ ListenerNode* creatListenerNode(Int32 fd, Director* director) {
 
     director->condition(&_this->m_pub.m_base.m_rcv_task, BIT_EVENT_READ);
     
-    _this->m_pub.m_base.getFd = _getFd;
-    _this->m_pub.m_base.readNode = _readNode;
+    _this->m_pub.m_base.getFd = _rtmp_getFd;
+    _this->m_pub.m_base.readNode = _rtmp_readNode;
+    _this->m_pub.m_base.destroy = _rtmp_destroy;
 
-    _this->m_pub.m_base.dealMsg = _dealMsg;
-    _this->m_pub.m_base.dealCmd = _dealCmd;
+    return &_this->m_pub;
+}
+
+
+struct SockListenerPriv {
+    ListenerNode m_pub;
+
+    Director* m_director;
+    Int32 m_listener_fd;
+};
+
+
+METHOD(NodeBase, sock_getFd, Int32, SockListenerPriv* _this) {
+    return _this->m_listener_fd;
+}
+
+METHOD(NodeBase, sock_readNode, EnumSockRet, SockListenerPriv* _this) {
+	acceptSock(_this->m_listener_fd, _this->m_director);
+
+    return ENUM_SOCK_MARK_FINISH;
+}
+
+
+METHOD(NodeBase, sock_destroy, Void, SockListenerPriv* _this) {
     
-    _this->m_pub.m_base.onClose = _onClose;
-    _this->m_pub.m_base.destroy = _destroy;
+    ObjCenter::finishNode(&_this->m_pub.m_base); 
+
+    closeHd(_this->m_listener_fd);
+    I_FREE(_this);
+}
+
+ListenerNode* creatSockListener(Int32 fd, Director* director) {
+    SockListenerPriv* _this = NULL;
+
+    I_NEW(SockListenerPriv, _this);
+
+    ObjCenter::initNode(&_this->m_pub.m_base);
+
+    _this->m_director = director;
+    _this->m_listener_fd = fd;
+
+    director->condition(&_this->m_pub.m_base.m_rcv_task, BIT_EVENT_READ);
+    
+    _this->m_pub.m_base.getFd = _sock_getFd;
+    _this->m_pub.m_base.readNode = _sock_readNode;
+    _this->m_pub.m_base.destroy = _sock_destroy;
 
     return &_this->m_pub;
 }

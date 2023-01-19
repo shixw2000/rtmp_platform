@@ -114,11 +114,11 @@ static const Int32 MAX_LOG_FILE_CNT = 3;
 static const Int32 MAX_LOG_NAME_SIZE = 32;
 static const Int32 MAX_LOG_CACHE_SIZE = 0x100000;
 static const Int32 MAX_CACHE_INDEX = 8;
-static Int32 g_log_level = 1;
+static Int32 g_log_level = 2;
 static Bool g_log_stdin = TRUE;
-static const Int32 MAX_LOG_LEVEL = 3;
+static const Int32 MAX_LOG_LEVEL = 5;
 static const Char* DEF_LOG_DESC[MAX_LOG_LEVEL] = {
-    "ERROR", "INFO", "DEBUG" 
+    "ERROR", "WARN", "INFO", "DEBUG", "VERB" 
 };
 
 static FILE* g_log_hd = NULL;

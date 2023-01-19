@@ -4,8 +4,9 @@
 
 
 #define LOG_VERB(format,args...)  formatLog(4, format, ##args)
-#define LOG_DEBUG(format,args...)  formatLog(2, format, ##args)
-#define LOG_INFO(format,args...)  formatLog(1, format, ##args)
+#define LOG_DEBUG(format,args...)  formatLog(3, format, ##args)
+#define LOG_INFO(format,args...)  formatLog(2, format, ##args)
+#define LOG_WARN(format,args...)  formatLog(1, format, ##args)
 #define LOG_ERROR(format,args...)  formatLog(0, format, ##args)
 
 extern Void initLib();

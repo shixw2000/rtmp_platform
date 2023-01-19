@@ -199,14 +199,18 @@ Int32 creatAddr(const Char ip[], int port, Void* addr, Int32* plen) {
 Int32 buildParam(const Char ip[], Int32 port, TcpParam* param) {
     Int32 ret = 0;
 
-    memset(param, 0, sizeof(TcpParam));
-    
-    strncpy(param->m_ip, ip, DEF_IP_SIZE-1);
-    param->m_port = port;
+    if (0 <= port && 0x10000 > port && '\0' != ip[0]) {
+        memset(param, 0, sizeof(TcpParam));
+        
+        strncpy(param->m_ip, ip, DEF_IP_SIZE-1);
+        param->m_port = port;
 
-    param->m_addr_len = (Int32)sizeof(param->m_addr);
-    ret = creatAddr(param->m_ip, param->m_port, 
-        param->m_addr, &param->m_addr_len);
+        param->m_addr_len = (Int32)sizeof(param->m_addr);
+        ret = creatAddr(param->m_ip, param->m_port, 
+            param->m_addr, &param->m_addr_len);
+    } else {
+        ret = -1;
+    }
     
     return ret;
 }

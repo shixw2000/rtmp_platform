@@ -4,26 +4,25 @@
 #include"analyser.h"
 
 
+template<AMFDataType arg_type, typename T>
 Cache* RtmpProto::genCall(const Chunk* call, const double* txn, 
-    const AMFObject* info, AMFDataType arg_type, const Void* arg) {
+    const AMFObject* info,  const T* arg) {
     Bool bOk = FALSE;
     Cache* cache = NULL;
     RtmpPkg* pkg = NULL;
     AMFObject obj = AMF_OBJ_INVALID;
     Chunk chunk = AMF_CHUNK_EMPTY;
     
-    m_amf->addPropAny(&obj, NULL, AMF_STRING, call);
-    m_amf->addPropAny(&obj, NULL, AMF_NUMBER, txn);
+    m_amf->addPropAny<AMF_STRING, Chunk>(&obj, NULL, call);
+    m_amf->addPropAny<AMF_NUMBER, double>(&obj, NULL, txn);
 
     if (NULL != info) {
-        m_amf->addPropAny(&obj, NULL, AMF_OBJECT, info);
+        m_amf->addPropAny<AMF_OBJECT, AMFObject>(&obj, NULL, info);
     } else {
-        m_amf->addPropAny(&obj, NULL, AMF_NULL, NULL); 
-    }
-
-    if (AMF_INVALID != arg_type) {
-        m_amf->addPropAny(&obj, NULL, arg_type, arg); 
+        m_amf->addPropAny<AMF_NULL, Void>(&obj, NULL, NULL); 
     } 
+    
+    m_amf->addPropAny<arg_type, T>(&obj, NULL, arg); 
 
     bOk = m_amf->encode(&obj, &chunk);
     if (bOk) {
@@ -43,6 +42,21 @@ Cache* RtmpProto::genCall(const Chunk* call, const double* txn,
     
 }
 
+template Cache* RtmpProto::genCall<AMF_NUMBER, double>(const Chunk* call, 
+    const double* txn, const AMFObject* info,  const double* arg);
+
+template Cache* RtmpProto::genCall<AMF_STRING, Chunk>(const Chunk* call, 
+    const double* txn, const AMFObject* info,  const Chunk* arg);
+
+template Cache* RtmpProto::genCall<AMF_BOOLEAN, Int32>(const Chunk* call, 
+    const double* txn, const AMFObject* info,  const Int32* arg);
+
+template Cache* RtmpProto::genCall<AMF_OBJECT, AMFObject>(const Chunk* call, 
+    const double* txn, const AMFObject* info,  const AMFObject* arg);
+
+template Cache* RtmpProto::genCall<AMF_INVALID, Void>(const Chunk* call, 
+    const double* txn, const AMFObject* info,  const Void* arg);
+
 Cache* RtmpProto::genStatus(const Chunk* status, const Chunk* path,
     const Char* desc) {
     Int32 len = 0;
@@ -54,24 +68,17 @@ Cache* RtmpProto::genStatus(const Chunk* status, const Chunk* path,
     chunk.m_data = (Byte*)desc;
     chunk.m_size = len; 
         
-    m_amf->addPropAny(&arg, &av_level, AMF_STRING, &av_status_level_ok);
-    m_amf->addPropAny(&arg, &av_code, AMF_STRING, status);
-    m_amf->addPropAny(&arg, &av_description, AMF_STRING, &chunk);
-    m_amf->addPropAny(&arg, &av_details, AMF_STRING, path);
-    m_amf->addPropAny(&arg, &av_clientid, AMF_STRING, &av_def_clientid); 
+    m_amf->addPropAny<AMF_STRING, Chunk>(&arg, &av_level, &av_status_level_ok);
+    m_amf->addPropAny<AMF_STRING, Chunk>(&arg, &av_code, status);
+    m_amf->addPropAny<AMF_STRING, Chunk>(&arg, &av_description, &chunk);
+    m_amf->addPropAny<AMF_STRING, Chunk>(&arg, &av_details, path);
+    m_amf->addPropAny<AMF_STRING, Chunk>(&arg, &av_clientid, &av_def_clientid); 
 
-    cache = genCall(&av_onStatus, &AMF_ZERO_DOUBLE, NULL, AMF_OBJECT, &arg);
+    cache = genCall<AMF_OBJECT, AMFObject>(&av_onStatus, 
+        &AMF_ZERO_DOUBLE, NULL, &arg);
 
     /* release arg */
     m_amf->freeObj(&arg); 
-    return cache;
-}
-
-Cache* RtmpProto::genResult(const double* txn, const AMFObject* info,
-    AMFDataType arg_type, const Void* arg) {
-    Cache* cache = NULL;
-
-    cache = genCall(&av__result, txn, info, arg_type, arg); 
     return cache;
 }
 
@@ -236,63 +243,30 @@ Int32 RtmpProto::sendUsrCtrl(Rtmp* rtmp, Uint16 ev, Uint32 p1, Uint32 p2) {
     return ret;
 }
 
-Int32 RtmpProto::sendResult(Rtmp* rtmp, Uint32 sid, const double* txn, 
-    const AMFObject* info, AMFDataType arg_type, const Void* arg) {
+Int32 RtmpProto::sendCache(Rtmp* rtmp, Uint32 sid, 
+    Uint32 delta_ts, Cache* cache) {
     Int32 ret = 0;
-    Cache* cache = NULL;
     RtmpNode* node = rtmp->m_entity;
 
-    cache = genResult(txn, info, arg_type, arg);
     if (NULL != cache) {
-        ret = node->sendPkg(node, sid, 0, cache);
+        ret = node->sendPkg(node, sid, delta_ts, cache);
 
         /* release cache itself */
         CacheCenter::del(cache);
+        return ret;
     } else {
-        ret = -1;
+        return -1;
     }
-
-    return ret;
-} 
+}
 
 Int32 RtmpProto::sendStatus(Rtmp* rtmp, Uint32 sid,
     const Chunk* status, const Chunk* path,
     const Char* desc) {
     Int32 ret = 0;
     Cache* cache = NULL;
-    RtmpNode* node = rtmp->m_entity;
 
     cache = genStatus(status, path, desc);
-    if (NULL != cache) {
-        ret = node->sendPkg(node, sid, 0, cache);
-
-        /* release cache itself */
-        CacheCenter::del(cache); 
-    } else {
-        ret = -1;
-    }
-
-    return ret;
-}
-
-Int32 RtmpProto::sendCall(Rtmp* rtmp, Uint32 sid, 
-    const Chunk* call, const double* txn,
-    const AMFObject* info, 
-    AMFDataType arg_type, const Void* arg) {
-    Int32 ret = 0;
-    Cache* cache = NULL;
-    RtmpNode* node = rtmp->m_entity;
-
-    cache = genCall(call, txn, info, arg_type, arg);
-    if (NULL != cache) {
-        ret = node->sendPkg(node, sid, 0, cache);
-
-        /* release cache itself */
-        CacheCenter::del(cache);
-    } else {
-        ret = -1;
-    }
-
+    ret = sendCache(rtmp, sid, 0, cache);
     return ret;
 }
 
@@ -311,10 +285,11 @@ Void RtmpProto::notifyStop(Rtmp* rtmp, Uint32 sid,
     const Chunk* code, const Char* desc) {
     RtmpUint* unit = rtmp->m_unit[sid];
     
-    if (NULL != unit) {
+    if (NULL != unit) { 
+        sendStatus(rtmp, sid, code, &unit->m_stream_name, desc); 
+
         /* user control end stream */
         sendUsrCtrl(rtmp, ENUM_USR_CTRL_STREAM_END, sid);
-        sendStatus(rtmp, sid, code, &unit->m_stream_name, desc); 
     }
 }
 

@@ -9,7 +9,8 @@ struct ListenerNode {
     NodeBase m_base;
 };
 
-ListenerNode* creatListenerNode(Int32 fd, Director* director);
+ListenerNode* creatRtmpListener(Int32 fd, Director* director);
+ListenerNode* creatSockListener(Int32 fd, Director* director);
 
 #endif
 

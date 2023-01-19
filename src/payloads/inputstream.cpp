@@ -8,7 +8,8 @@
 
 const RtmpInput::PFunc RtmpInput::m_funcs[ENUM_RTMP_RD_END] = {
     &RtmpInput::readInit,
-    &RtmpInput::readC0C1,
+    &RtmpInput::readC0,
+    &RtmpInput::readC1,
     &RtmpInput::readC2,
     &RtmpInput::readBasic,
     &RtmpInput::readHeader,
@@ -77,7 +78,7 @@ Void RtmpInput::resetChnPkg(RtmpChn* chn) {
 }
 
 Int32 RtmpInput::readInit(Rtmp* rtmp, Chunk*) {
-    Int32 size = RTMP_SIG_SIZE + 1; //c01 size
+    Int32 size = RTMP_SIG_SIZE + RTMP_SIG_C0_SIZE; //c01 size
     CommPkg* pkg = NULL;
     RtmpChn* chn = &rtmp->m_chn; 
    
@@ -87,17 +88,42 @@ Int32 RtmpInput::readInit(Rtmp* rtmp, Chunk*) {
         pkg->m_size = size;
         
         chn->m_data = pkg->m_data; 
-        chn->m_size = pkg->m_size;
+        chn->m_size = RTMP_SIG_C0_SIZE;
         
         /* read c01 */
-        chn->m_rd_stat = ENUM_RTMP_RD_C0C1;
+        chn->m_rd_stat = ENUM_RTMP_RD_C0;
         return 0;
     } else { 
         return -1;
     }
 }
 
-Int32 RtmpInput::readC0C1(Rtmp* rtmp, Chunk* chunk) {
+Int32 RtmpInput::readC0(Rtmp* rtmp, Chunk* chunk) {
+    Bool bOk = FALSE;
+    RtmpChn* chn = &rtmp->m_chn;
+
+    bOk = fill(chn, chunk);
+    if (bOk) {   
+        bOk = chkRtmpVer(chn->m_data[0]);
+        if (bOk) {
+            /* read more c1 data */
+            chn->m_size += RTMP_SIG_SIZE;
+            
+            /* read c1 */
+            chn->m_rd_stat = ENUM_RTMP_RD_C1;
+            return 0;
+        } else {
+            LOG_ERROR("handshake| ver=0x%x| msg=invalid c0|",
+                chn->m_data[0]);
+            
+            return -1;
+        }
+    } else {
+        return 0;
+    } 
+}
+
+Int32 RtmpInput::readC1(Rtmp* rtmp, Chunk* chunk) {
     Int32 ret = 0;
     Int32 size = RTMP_SIG_SIZE; // c2 size
     Bool bOk = FALSE;
@@ -203,8 +229,9 @@ Int32 RtmpInput::readBasic(Rtmp* rtmp, Chunk* chunk) {
                 chn->m_input->m_pld_size);
 
             pkg = MsgCenter::cast<RtmpPkg>(chn->m_input->m_pkg);
+            
             pkg->m_timestamp = chn->m_input->m_timestamp;
-            pkg->m_epoch = chn->m_input->m_epoch + chn->m_input->m_timestamp;
+            pkg->m_epoch = chn->m_input->m_epoch + pkg->m_timestamp;
             pkg->m_sid = chn->m_input->m_sid;
             
             chn->m_input->m_rd_bytes = 0;
@@ -333,9 +360,9 @@ Void RtmpInput::parseExtTime(Rtmp* rtmp) {
 
     pkg->m_timestamp = ts; 
     if (RTMP_LARGE_FMT != chn->m_input->m_fmt) {
-        pkg->m_epoch = chn->m_input->m_epoch + ts;
+        pkg->m_epoch = chn->m_input->m_epoch + pkg->m_timestamp;
     } else {
-        pkg->m_epoch = ts;
+        pkg->m_epoch = pkg->m_timestamp;
     }
 }
 
@@ -389,31 +416,36 @@ Int32 RtmpInput::readChunk(Rtmp* rtmp, Chunk* chunk) {
 
 Int32 RtmpInput::endChunk(Rtmp* rtmp) {
     Int32 ret = 0;
+    Bool isFlv = FALSE;
     RtmpPkg* pkg = NULL;
     RtmpNode* node = rtmp->m_entity;
     RtmpChn* chn = &rtmp->m_chn; 
 
     pkg = MsgCenter::cast<RtmpPkg>(chn->m_input->m_pkg);
     
+    isFlv = chkFlvData(pkg->m_msg_type);
     chn->m_input->m_rd_bytes += chn->m_size; 
     
     if (chn->m_input->m_rd_bytes == pkg->m_size) { 
-        LOG_INFO("end_chunk_pkg| fmt=%u| cid=%u|"
-            " epoch=%u| timestamp=%u| pkg_size=%d|"
-            " rtmp_type=%u| sid=%u|"
-            " chunk_size=%d| chunk_in_size=%d|",
-            chn->m_input->m_fmt,
-            chn->m_input->m_cid,
-            
-            pkg->m_epoch,
-            pkg->m_timestamp,
-            pkg->m_size, 
-            
-            pkg->m_rtmp_type,
-            pkg->m_sid,
-            
-            chn->m_size,
-            rtmp->m_chunkSizeIn);
+        if (!isFlv || g_conf.m_prnt_flv) {
+            LOG_INFO("end_chunk_pkg| user_id=%u| fmt=%u| cid=%u|"
+                " epoch=%u| timestamp=%u| pkg_size=%d|"
+                " rtmp_type=%u| sid=%u|"
+                " chunk_size=%d| chunk_in_size=%d|",
+                rtmp->m_user_id,
+                chn->m_input->m_fmt,
+                chn->m_input->m_cid,
+                
+                pkg->m_epoch,
+                pkg->m_timestamp,
+                pkg->m_size, 
+                
+                pkg->m_rtmp_type,
+                pkg->m_sid,
+                
+                chn->m_size,
+                rtmp->m_chunkSizeIn);
+        }
 
         /* receive a completed msg */
         node->recv(node, pkg->m_msg_type, pkg->m_sid, chn->m_input->m_pkg); 
@@ -428,27 +460,30 @@ Int32 RtmpInput::endChunk(Rtmp* rtmp) {
         /* release parameters */
         resetChnPkg(chn);
     } else {
-        LOG_DEBUG("end_chunk| fmt=%u| cid=%u|"
-            " epoch=%u| timestamp=%u| payload_size=%u|"
-            " rtmp_type=%u| sid=%u|"
-            " rd_bytes=%d| chunk_size=%d| chunk_in_size=%d|",
-            chn->m_input->m_fmt,
-            chn->m_input->m_cid, 
+        if (!isFlv || g_conf.m_prnt_flv) {
+            LOG_INFO("end_chunk| user_id=%u| fmt=%u| cid=%u|"
+                " epoch=%u| timestamp=%u| payload_size=%u|"
+                " rtmp_type=%u| sid=%u|"
+                " rd_bytes=%d| chunk_size=%d| chunk_in_size=%d|",
+                rtmp->m_user_id,
+                chn->m_input->m_fmt,
+                chn->m_input->m_cid, 
 
-            pkg->m_epoch,
-            pkg->m_timestamp,
-            pkg->m_size, 
-            
-            pkg->m_rtmp_type,
-            pkg->m_sid,
-            
-            chn->m_input->m_rd_bytes,
-            chn->m_size, 
-            rtmp->m_chunkSizeIn);
-            
-        chn->m_data = NULL;
-        chn->m_upto = 0;
-        chn->m_size = 0; 
+                pkg->m_epoch,
+                pkg->m_timestamp,
+                pkg->m_size, 
+                
+                pkg->m_rtmp_type,
+                pkg->m_sid,
+                
+                chn->m_input->m_rd_bytes,
+                chn->m_size, 
+                rtmp->m_chunkSizeIn);
+                
+            chn->m_data = NULL;
+            chn->m_upto = 0;
+            chn->m_size = 0; 
+        }
     }
 
     chn->m_input = NULL;

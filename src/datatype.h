@@ -82,6 +82,19 @@ enum EnumTimerType {
 static const Int32 DEF_TIMER_TICK_MS = 100; // 100ms
 static const Uint32 DEF_SECOND_TICK_CNT = 10;
 
+static const Int32 MAX_PIN_PASSWD_SIZE = 64; 
+
+struct Config { 
+    Int32 m_log_level;
+    Int32 m_log_stdin;
+    Int32 m_chunk_size;
+    Int32 m_window_size;
+    Int32 m_prnt_flv;
+    Int32 m_port;
+    Char m_ip[32];
+    Char m_passwd[MAX_PIN_PASSWD_SIZE];
+};
+
 struct TcpParam {
     Int32 m_port;
     Int32 m_addr_len;
@@ -134,7 +147,8 @@ struct NodeBase {
 enum EnumRtmpRdStat {
     ENUM_RTMP_RD_INIT,
 
-    ENUM_RTMP_RD_C0C1,
+    ENUM_RTMP_RD_C0,
+    ENUM_RTMP_RD_C1,
     ENUM_RTMP_RD_C2,
     
     ENUM_RTMP_RD_BASIC,
@@ -176,7 +190,7 @@ static const Uint32 RTMP_MAX_SESS_CNT = (RTMP_MAX_CHNN_ID
 
 static const Int32 RTMP_MAX_HEADER_SIZE = 16;
 static const Int32 RTMP_MIN_CHUNK_SIZE = 128;
-static const Int32 RTMP_DEF_CHUNK_SIZE = 132;
+static const Int32 RTMP_MAX_CHUNK_SIZE = 0x4000;
 static const Int32 RTMP_EXT_TIMESTAMP_SIZE = 4;
 static const Uint32 RTMP_TIMESTAMP_EXT_MARK = 0XFFFFFF;
 
@@ -204,6 +218,7 @@ static const Int32 RTMP_MSG_TYPE_META_INFO = 0x12;
 static const Int32 RTMP_MSG_TYPE_INVOKE = 0x14;
 
 static const Int32 DEF_DIGEST_LENGTH = 32;
+static const Int32 RTMP_SIG_C0_SIZE = 1;
 static const Int32 RTMP_SIG_SIZE = 1536;
 static const Byte  RTMP_DEF_HANDSHAKE_VER = 0x3;
 
@@ -332,6 +347,8 @@ typedef struct CommPkg {
 } CommPkg;
 
 /*******end of caches*********/
+
+extern Config g_conf;
 
 #endif
 

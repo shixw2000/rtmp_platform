@@ -621,7 +621,8 @@ Void Director::freeNodes() {
     }
 }
 
-Int32 Director::addListener(const Char szip[], Int32 port) {
+Int32 Director::addListener(EnumListenerType type,
+    const Char szip[], Int32 port) {
     Int32 ret = 0;
     Int32 fd = -1;
     ListenerNode* node = NULL; 
@@ -643,11 +644,25 @@ Int32 Director::addListener(const Char szip[], Int32 port) {
         return -1;
     } 
 
-    node = creatListenerNode(fd, this);
+    switch (type) {
+    case ENUM_LISTENER_RTMP:
+        node = creatRtmpListener(fd, this);
+        break;
+
+    case ENUM_LISTENER_SOCK:
+        node = creatSockListener(fd, this);
+        break;
+
+    default:
+        closeHd(fd);
+        return -1;
+        break;
+    } 
+    
     registTask(&node->m_base, EVENT_TYPE_RD);
 
-    LOG_INFO("++++add_listener| fd=%d| addr=%s:%d| msg=ok|",
-        fd, param.m_ip, param.m_port);
+    LOG_INFO("++++add_listener| type=%d| fd=%d| addr=%s:%d| msg=ok|",
+        type, fd, param.m_ip, param.m_port);
 
     return 0;
 }

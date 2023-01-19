@@ -35,11 +35,14 @@ struct RtmpNode {
     /* end send functions */
 };
 
+extern Bool chkRtmpVer(Byte ver);
+
 extern ChnInput* creatChnIn(Uint32 cid);
 extern Void freeChnIn(ChnInput* chn);
 
 extern Uint32 toMsgType(Uint32 rtmp_type);
 extern Uint32 toCid(Uint32 msg_type, Uint32 sid);
+extern Bool chkFlvData(Uint32 msg_type);
 
 extern Cache* creatPkg(Uint32 rtmp_type, Uint32 payload_size);
 
