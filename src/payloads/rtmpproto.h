@@ -28,8 +28,14 @@ public:
         Int32 ret = 0;
         Cache* cache = NULL;
 
-        cache = genCall<arg_type, T>(call, txn, info, arg); 
-        ret = sendCache(rtmp, sid, 0, cache);
+        cache = genCall<arg_type, T>(call, txn, info, arg);
+        if (NULL != cache) {
+            ret = _send(rtmp, sid, 0, cache);
+            freeCache(cache);
+        } else {
+            ret = -1;
+        }
+        
         return ret;
     }
 
@@ -66,7 +72,8 @@ public:
 private:
     Int32 sendCtrl(Rtmp* rtmp, Uint32 rtmp_type, const Chunk* chunk); 
 
-    Int32 sendCache(Rtmp* rtmp, Uint32 sid, Uint32 delta_ts, Cache* cache);
+    Int32 _send(Rtmp* rtmp, Uint32 sid, Uint32 delta_ts, Cache* cache);
+    Void freeCache(Cache* cache);
 
 private:
     AmfPayload* m_amf;    

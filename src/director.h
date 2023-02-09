@@ -23,6 +23,7 @@ enum EnumListenerType {
 
     ENUM_LISTENER_SOCK,
     ENUM_LISTENER_RTMP,
+    ENUM_LISTENER_RTSP,
 
     ENUM_LISTENER_END
 };
@@ -71,7 +72,7 @@ public:
     Void procTimer(EnumCtrlType type, CacheHdr* hdr);
 
     Void registTask(NodeBase* node, Int32 ev);
-    Void closeTask(NodeBase* node, Int32 errcode);
+    Void unregTask(NodeBase* node, Int32 errcode);
 
     Int32 addListener(EnumListenerType type, const Char szip[], Int32 port);
     
@@ -87,7 +88,7 @@ private:
     Void dealCmd(NodeBase* node, CacheHdr* hdr);
     Void dealSysMsg(NodeBase* node, CacheHdr* hdr);
     Void procStopCmd(NodeBase* node, CacheHdr* hdr);
-    Void procCloseCmd(NodeBase* node, CacheHdr* hdr);
+    Void procUnregCmd(NodeBase* node, CacheHdr* hdr);
     Void procRegistCmd(NodeBase* node, CacheHdr* hdr);
     
     Int32 recv(CacheHdr* hdr); 

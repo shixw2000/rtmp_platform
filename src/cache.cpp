@@ -178,3 +178,55 @@ Bool MsgCenter::chkSysMsg(CacheHdr* hdr) {
     return hdr->m_type < ENUM_MSG_TYPE_SYSTEM_MAX;
 }
 
+CacheHdr* MsgCenter::creatSendMsg(Byte* data1, Int32 data1Len,
+    Byte* data2, Int32 data2Len, Cache* cache) {
+    CacheHdr* hdr = NULL;
+    MsgSend* msg = NULL;
+    
+    hdr = MsgCenter::creatMsg<MsgSend>(ENUM_MSG_TYPE_SEND, data1Len); 
+    if (NULL != hdr) {
+        msg = MsgCenter::body<MsgSend>(hdr);
+        
+        if (0 < data1Len) {
+            CacheCenter::copy(msg->m_head, data1, data1Len);
+            msg->m_hdr_size = data1Len;
+        }
+
+        if (0 < data2Len) {
+            msg->m_body = data2;
+            msg->m_body_size = data2Len; 
+
+            /* add ref */
+            CacheCenter::setCache(hdr, CacheCenter::ref(cache));
+        }
+    }
+
+    return hdr;
+}
+
+CacheHdr* MsgCenter::creat2SendMsg(Byte* data1, Int32 data1Len,
+    Byte* data2, Int32 data2Len) {
+    Int32 total = 0;
+    CacheHdr* hdr = NULL;
+    MsgSend* msg = NULL;
+
+    total = data1Len + data2Len;
+    hdr = MsgCenter::creatMsg<MsgSend>(ENUM_MSG_TYPE_SEND, total); 
+    if (NULL != hdr) {
+        msg = MsgCenter::body<MsgSend>(hdr);
+        
+        if (0 < data1Len) {
+            CacheCenter::copy(msg->m_head, data1, data1Len); 
+        }
+
+        if (0 < data2Len) {
+            CacheCenter::copy(msg->m_head + data1Len, data2, data2Len); 
+        }
+        
+        msg->m_hdr_size = total; 
+    }
+
+    return hdr;
+}
+
+

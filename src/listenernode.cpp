@@ -5,6 +5,7 @@
 #include"sockutil.h"
 #include"socknode.h"
 #include"rtmpnode.h"
+#include"rtp/rtspnode.h"
 
 
 static Void acceptSock(Int32 listener_fd, Director* director) { 
@@ -16,7 +17,7 @@ static Void acceptSock(Int32 listener_fd, Director* director) {
 
     newfd = acceptCli(listener_fd);
     while (0 <= newfd) { 
-        getPeerInfo(newfd, peer_ip, &peer_port);
+        getPeerInfo(newfd, &peer_port, peer_ip, DEF_IP_SIZE);
         
         node = creatSockNode(newfd, director);
         if (NULL != node) {
@@ -54,7 +55,7 @@ static Void acceptRtmp(Int32 listener_fd, Director* director) {
 
     newfd = acceptCli(listener_fd);
     while (0 <= newfd) { 
-        getPeerInfo(newfd, peer_ip, &peer_port);
+        getPeerInfo(newfd, &peer_port, peer_ip, DEF_IP_SIZE);
         
         node = creatRtmpNode(newfd, director);
         if (NULL != node) {
@@ -117,6 +118,7 @@ ListenerNode* creatRtmpListener(Int32 fd, Director* director) {
 
     ObjCenter::initNode(&_this->m_pub.m_base);
 
+    _this->m_pub.m_base.m_node_type = ENUM_NODE_LISTENER;
     _this->m_director = director;
     _this->m_listener_fd = fd;
 
@@ -164,6 +166,7 @@ ListenerNode* creatSockListener(Int32 fd, Director* director) {
 
     ObjCenter::initNode(&_this->m_pub.m_base);
 
+    _this->m_pub.m_base.m_node_type = ENUM_NODE_LISTENER;
     _this->m_director = director;
     _this->m_listener_fd = fd;
 
@@ -174,6 +177,33 @@ ListenerNode* creatSockListener(Int32 fd, Director* director) {
     _this->m_pub.m_base.destroy = _sock_destroy;
 
     return &_this->m_pub;
+}
+
+ListenerNode* creatListener(Int32 type, Int32 fd, Director* director) {
+    ListenerNode* node = NULL;
+
+    switch (type) {
+    case ENUM_LISTENER_RTMP:
+        node = creatRtmpListener(fd, director);
+        break;
+
+    case ENUM_LISTENER_SOCK:
+        node = creatSockListener(fd, director);
+        break;
+
+    case ENUM_LISTENER_RTSP:
+        node = creatRtspListener(fd, director);
+        break;
+
+    default:
+        break;
+    }
+
+    if (NULL != node) {
+        director->registTask(&node->m_base, EVENT_TYPE_RD);
+    }
+
+    return node;
 }
 
 

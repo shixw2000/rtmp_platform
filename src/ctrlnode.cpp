@@ -88,6 +88,8 @@ CtrlNode* creatCtrlNode(Director* director) {
 
     ObjCenter::initNode(&_this->m_pub.m_base);
 
+    _this->m_pub.m_base.m_node_type = ENUM_NODE_CTRL;
+    
     INIT_LIST_HEAD(&_this->m_rcv_que_tmp);
     INIT_LIST_HEAD(&_this->m_rcv_que);
     _this->m_director = director;

@@ -27,11 +27,11 @@ struct MsgComm {
 /******* end ********/
 
 enum EnumMsgType {
-    ENUM_MSG_TYPE_CLOSE,
     ENUM_MSG_TYPE_STOP,
     ENUM_MSG_ADD_FD,
     ENUM_MSG_DEL_FD,
     ENUM_MSG_REGIST_TASK,
+    ENUM_MSG_UNREG_TASK,
     ENUM_MSG_TIMER_TICK,
 
     ENUM_MSG_TYPE_SYSTEM_MAX = 100, // separate msgs

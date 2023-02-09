@@ -100,9 +100,8 @@ Int32 RtmpProto::recv(RtmpUint* unit, Int32 msg_type, Cache* cache) {
 
 Int32 RtmpProto::send(RtmpUint* unit, Uint32 delta_ts, Cache* cache) {
     Int32 ret = 0;
-    RtmpNode* node = unit->m_parent->m_entity;
 
-    ret = node->sendPkg(node, unit->m_sid, delta_ts, cache);
+    ret = _send(unit->m_parent, unit->m_sid, delta_ts, cache);
     return ret;
 }
 
@@ -243,20 +242,17 @@ Int32 RtmpProto::sendUsrCtrl(Rtmp* rtmp, Uint16 ev, Uint32 p1, Uint32 p2) {
     return ret;
 }
 
-Int32 RtmpProto::sendCache(Rtmp* rtmp, Uint32 sid, 
+Int32 RtmpProto::_send(Rtmp* rtmp, Uint32 sid, 
     Uint32 delta_ts, Cache* cache) {
     Int32 ret = 0;
     RtmpNode* node = rtmp->m_entity;
 
-    if (NULL != cache) {
-        ret = node->sendPkg(node, sid, delta_ts, cache);
+    ret = node->sendPkg(node, sid, delta_ts, cache);
+    return ret;
+}
 
-        /* release cache itself */
-        CacheCenter::del(cache);
-        return ret;
-    } else {
-        return -1;
-    }
+Void RtmpProto::freeCache(Cache* cache) {
+    CacheCenter::del(cache);
 }
 
 Int32 RtmpProto::sendStatus(Rtmp* rtmp, Uint32 sid,
@@ -266,7 +262,14 @@ Int32 RtmpProto::sendStatus(Rtmp* rtmp, Uint32 sid,
     Cache* cache = NULL;
 
     cache = genStatus(status, path, desc);
-    ret = sendCache(rtmp, sid, 0, cache);
+    if (NULL != cache) {
+        ret = _send(rtmp, sid, 0, cache);
+
+        freeCache(cache);
+    } else {
+        ret = -1;
+    }
+    
     return ret;
 }
 

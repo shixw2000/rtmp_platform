@@ -82,6 +82,14 @@ public:
     static Int64 getExchMsgVal(CacheHdr* hdr);
     
     static Bool chkSysMsg(CacheHdr* hdr); 
+
+    /* copy data1, and refereces data2 with cache */
+    static CacheHdr* creatSendMsg(Byte* data1, Int32 data1Len,
+        Byte* data2, Int32 data2Len, Cache* cache);
+
+    /* copy data1 and data2 both */
+    static CacheHdr* creat2SendMsg(Byte* data1, Int32 data1Len,
+        Byte* data2, Int32 data2Len);
 };
 
 #endif

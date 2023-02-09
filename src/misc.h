@@ -3,11 +3,21 @@
 #include"sysoper.h"
 
 
-#define LOG_VERB(format,args...)  formatLog(4, format, ##args)
-#define LOG_DEBUG(format,args...)  formatLog(3, format, ##args)
-#define LOG_INFO(format,args...)  formatLog(2, format, ##args)
-#define LOG_WARN(format,args...)  formatLog(1, format, ##args)
-#define LOG_ERROR(format,args...)  formatLog(0, format, ##args)
+enum EnumLogLevel {
+    ENUM_LOG_ERR = 0,
+    ENUM_LOG_WARN,
+    ENUM_LOG_INFO,
+    ENUM_LOG_DEBUG,
+    ENUM_LOG_VERB,
+    
+    MAX_LOG_LEVEL
+};
+
+#define LOG_VERB(format,args...)  formatLog(ENUM_LOG_VERB, format, ##args)
+#define LOG_DEBUG(format,args...)  formatLog(ENUM_LOG_DEBUG, format, ##args)
+#define LOG_INFO(format,args...)  formatLog(ENUM_LOG_INFO, format, ##args)
+#define LOG_WARN(format,args...)  formatLog(ENUM_LOG_WARN, format, ##args)
+#define LOG_ERROR(format,args...)  formatLog(ENUM_LOG_ERR, format, ##args)
 
 extern Void initLib();
 extern Void finishLib();
@@ -21,12 +31,17 @@ Void maskSig(int sig);
 Void armSig(int sig, void (*)(int));
 Void sleepSec(int sec);
 Void getRand(void* buf, int len);
+Void sysPause();
+Uint32 sysRand();
 
-Uint64 getSysTime();
-Uint32 getMonoTime();
+Uint32 getSysTime();
 
 Uint64 getMonoTimeMs();
 
+static const Int32 DEF_TIME_FORMAT_SIZE = 64;
+
+Int32 formatTime(Uint32 ts, const Char* format, Bool bUtc, 
+    Char (&out)[DEF_TIME_FORMAT_SIZE]); 
 
 #endif
 

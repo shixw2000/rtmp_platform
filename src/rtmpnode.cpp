@@ -186,6 +186,45 @@ static Int32 buildHeader(HeaderRtmp* header, Byte buff[], Int32 size) {
     return builder.used();
 }
 
+static Int32 sendData(RtmpNodePriv* _this, Byte* data1, Int32 data1Len,
+    Byte* data2, Int32 data2Len, Cache* cache) {
+    Int32 ret = 0;
+    CacheHdr* hdr = NULL;
+    Rtmp* rtmp = &_this->m_rtmp; 
+    
+    hdr = MsgCenter::creatSendMsg(data1, data1Len, data2, data2Len, cache);
+    if (NULL != hdr) { 
+        ret = _this->m_director->send(&_this->m_pub.m_base, hdr); 
+        if (0 == ret) {
+            /* add send bytes */
+            rtmp->m_snd_total_bytes += data1Len + data2Len;
+        }
+    } else {
+        ret = -1;
+    }
+    
+    return ret;
+}
+
+static Int32 sendData2(RtmpNodePriv* _this, Byte* data1, Int32 data1Len,
+    Byte* data2, Int32 data2Len) {
+    Int32 ret = 0;
+    CacheHdr* hdr = NULL;
+    Rtmp* rtmp = &_this->m_rtmp; 
+    
+    hdr = MsgCenter::creat2SendMsg(data1, data1Len, data2, data2Len);
+    if (NULL != hdr) { 
+        ret = _this->m_director->send(&_this->m_pub.m_base, hdr); 
+        if (0 == ret) {
+            /* add send bytes */
+            rtmp->m_snd_total_bytes += data1Len + data2Len;
+        }
+    } else {
+        ret = -1;
+    }
+    
+    return ret;
+}
 
 METHOD(NodeBase, getFd, Int32, RtmpNodePriv* _this) {
     return _this->m_rtmp.m_fd;
@@ -267,109 +306,102 @@ METHOD(RtmpNode, onConnFail, Void, RtmpNodePriv* ) {
 
 METHOD(RtmpNode, sendHandshake, Int32, RtmpNodePriv* _this, Cache* cache) {
     Int32 ret = 0;
-    CacheHdr* hdr = NULL;
-    MsgSend* msg = NULL;
     CommPkg* pkg = NULL; 
-    Rtmp* rtmp = &_this->m_rtmp; 
     
-    hdr = MsgCenter::creatMsg<MsgSend>(ENUM_MSG_TYPE_SEND); 
-    msg = MsgCenter::body<MsgSend>(hdr);
-
-    /* add ref */
-    CacheCenter::setCache(hdr, CacheCenter::ref(cache));
-
     pkg = MsgCenter::cast<CommPkg>(cache);
-    msg->m_body = pkg->m_data;
-    msg->m_body_size = pkg->m_size;
-
-    /* add send bytes */
-    rtmp->m_snd_total_bytes += pkg->m_size;
-
-    ret = _this->m_director->send(&_this->m_pub.m_base, hdr); 
+    
+    ret = sendData(_this, NULL, 0, pkg->m_data, pkg->m_size, cache); 
     return ret;
 }
 
 METHOD(RtmpNode, sendPayload, Int32, RtmpNodePriv* _this,
     Uint32 sid, Uint32 rtmp_type, const Chunk* chunk) {
     Int32 ret = 0;
-    Uint32 msg_type = 0;
     Int32 hdr_size = 0;
-    Int32 total = 0;
+    Int32 len = 0;
     Int32 payload_size = 0;
+    Uint32 msg_type = 0;
     Byte* payload = NULL;
-    CacheHdr* hdr = NULL;
-    MsgSend* msg = NULL; 
-    Cache* cache = NULL;
-    RtmpPkg* pkg = NULL;
-    Rtmp* rtmp = &_this->m_rtmp; 
+    Rtmp* rtmp = &_this->m_rtmp;
     HeaderRtmp header;
+    Byte ch = 0; // used by fmt = 0x3
     Byte buff[RTMP_MAX_HEADER_SIZE] = {0};
 
-    payload_size = chunk->m_size;
     payload = chunk->m_data;
+    payload_size = chunk->m_size;
     msg_type = toMsgType(rtmp_type);
-
-    if (payload_size <= RTMP_MIN_CHUNK_SIZE) {
-        CacheCenter::zero(&header, sizeof(HeaderRtmp));
-
-        /* epoch is zero */
-        header.m_sid = sid;
-        header.m_pld_size = payload_size;
-        header.m_rtmp_type = rtmp_type;
-        header.m_cid = toCid(msg_type, sid);
-
-        adjustHeader(&header, rtmp);
-        hdr_size = buildHeader(&header, buff, RTMP_MAX_HEADER_SIZE); 
-
-        total = hdr_size + payload_size;
-        hdr = MsgCenter::creatMsg<MsgSend>(ENUM_MSG_TYPE_SEND, total);
-        msg = MsgCenter::body<MsgSend>(hdr);
-
-        CacheCenter::copy(msg->m_head, buff, hdr_size);
-        CacheCenter::copy(msg->m_head + hdr_size, payload, payload_size);
-        msg->m_hdr_size = total;
-
-        /* add send bytes */
-        rtmp->m_snd_total_bytes += total;
-        
-        ret = _this->m_director->send(&_this->m_pub.m_base, hdr); 
-
-        LOG_INFO("send_payload| ret=%d| user_id=%u| fd=%d|"
-            " rtmp_type=%u| payload_size=%d| sid=%u|",
-            ret, rtmp->m_user_id, rtmp->m_fd, 
-            rtmp_type, payload_size, sid);
-    } else { 
-        cache = creatPkg(rtmp_type, payload_size);
-        if (NULL != cache) { 
-            pkg = MsgCenter::cast<RtmpPkg>(cache); 
-
-            CacheCenter::copy(pkg->m_payload, payload, payload_size);
-            ret = _this->m_pub.sendPkg(&_this->m_pub, sid, 0, cache);
-
-            CacheCenter::del(cache);
-        } else {
-            ret = -1;
-        } 
-    } 
     
+    CacheCenter::zero(&header, sizeof(header)); 
+
+    /* times are all zeros */
+    header.m_pld_size = payload_size;
+    header.m_rtmp_type = rtmp_type; 
+    header.m_sid = sid; 
+    header.m_cid = toCid(msg_type, sid);
+    
+    adjustHeader(&header, rtmp);
+    
+    /* creat first chunk header */
+    hdr_size = buildHeader(&header, buff, RTMP_MAX_HEADER_SIZE);
+
+    /* calc next chunk header */
+    ch = (RTMP_MINIMUM_FMT << 6) | (header.m_cid & 0x3F); 
+
+    while (0 < payload_size) {
+        if (payload_size < rtmp->m_chunkSizeOut) {
+            len = payload_size;
+        } else {
+            len = rtmp->m_chunkSizeOut;
+        }
+        
+        ret = sendData2(_this, buff, hdr_size, payload, len);
+        if (0 == ret) {
+            payload += len;
+            payload_size -= len;
+
+            /* set next chunk header */
+            buff[0] = ch;
+            hdr_size = 1;
+        } else {
+            break;
+        }
+    }
+
+    LOG_INFO("send_payload| ret=%d| user_id=%u| fd=%d| fmt=%u| cid=%u|"
+        " epoch=%u| timestamp=%u|"
+        " rtmp_type=%u| payload_size=%u|"
+        " sid=%u| chunk_size_out=%d|",
+        ret, rtmp->m_user_id,
+        rtmp->m_fd, 
+        header.m_fmt,
+        header.m_cid, 
+
+        header.m_epoch,
+        header.m_timestamp,
+        header.m_rtmp_type,
+        header.m_pld_size,
+        
+        header.m_sid, 
+        rtmp->m_chunkSizeOut);
+
     return ret;
 }
 
 METHOD(RtmpNode, sendPkg, Int32, RtmpNodePriv* _this, 
-    Uint32 sid, Uint32 delta_ts, Cache* payload) {
+    Uint32 sid, Uint32 delta_ts, Cache* cache) {
     Int32 ret = 0;
     Int32 hdr_size = 0;
-    Int32 total = 0;
+    Int32 len = 0;
+    Int32 payload_size = 0;
     Bool is_flv = FALSE;
-    Byte ch = 0; 
-    CacheHdr* hdr = NULL;
-    MsgSend* msg = NULL; 
+    Byte* payload = NULL;
     RtmpPkg* pkg = NULL;
     Rtmp* rtmp = &_this->m_rtmp;
     HeaderRtmp header;
+    Byte ch = 0; // used by fmt = 0x3
     Byte buff[RTMP_MAX_HEADER_SIZE] = {0};
 
-    pkg = MsgCenter::cast<RtmpPkg>(payload); 
+    pkg = MsgCenter::cast<RtmpPkg>(cache); 
     
     genHeader(sid, delta_ts, pkg, &header);
     
@@ -382,52 +414,45 @@ METHOD(RtmpNode, sendPkg, Int32, RtmpNodePriv* _this,
     ch = (RTMP_MINIMUM_FMT << 6) | (header.m_cid & 0x3F); 
 
     /* set begin cache */
-    total = pkg->m_skip;
+    payload = pkg->m_payload + pkg->m_skip;
+    payload_size = pkg->m_size - pkg->m_skip;
     
-    do {
-        hdr = MsgCenter::creatMsg<MsgSend>(ENUM_MSG_TYPE_SEND, hdr_size);
-        msg = MsgCenter::body<MsgSend>(hdr);
-
-        CacheCenter::copy(msg->m_head, buff, hdr_size);
-        msg->m_hdr_size = hdr_size;
-        
-        /* set cache of msg, add ref */
-        CacheCenter::setCache(hdr, CacheCenter::ref(payload)); 
-        msg->m_body = pkg->m_payload;
-        msg->m_body_upto = total;
-        msg->m_body_size = total + rtmp->m_chunkSizeOut;
-        if (msg->m_body_size > pkg->m_size) {
-            msg->m_body_size = pkg->m_size;
+    while (0 < payload_size) { 
+        if (payload_size < rtmp->m_chunkSizeOut) {
+            len = payload_size;
+        } else {
+            len = rtmp->m_chunkSizeOut;
         }
         
-        /* update total */
-        total = msg->m_body_size;
+        ret = sendData(_this, buff, hdr_size, payload, len, cache);
+        if (0 == ret) {
+            payload += len;
+            payload_size -= len;
 
-        /* add send bytes */
-        rtmp->m_snd_total_bytes += hdr_size + msg->m_body_size;
-
-        /* send first chunk */
-        ret = _this->m_director->send(&_this->m_pub.m_base, hdr); 
-
-        /* set next chunk header */
-        buff[0] = ch;
-        hdr_size = 1;
-    } while (total < pkg->m_size && 0 == ret);
+            /* set next chunk header */
+            buff[0] = ch;
+            hdr_size = 1;
+        } else {
+            break;
+        }
+    }
 
     is_flv = chkFlvData(pkg->m_msg_type);
     if (!is_flv || g_conf.m_prnt_flv) {
-        LOG_INFO("send_pkg| ret=%d| user_id=%u| fd=%d| cid=%u| fmt=%u|"
-            " epoch=%u| timestamp=%u|"
+        LOG_INFO("send_pkg| ret=%d| user_id=%u| fd=%d| fmt=%u| cid=%u|"
+            " epoch=%u| timestamp=%u| delta_ts=%u|"
             " rtmp_type=%u| payload_size=%u|"
             " sid=%u| pkg_sid=%u|"
             " chunk_size_out=%d|",
             ret, rtmp->m_user_id,
             rtmp->m_fd, 
-            header.m_cid,
             header.m_fmt,
+            header.m_cid, 
 
             header.m_epoch,
             header.m_timestamp,
+            delta_ts,
+            
             header.m_rtmp_type,
             header.m_pld_size,
             
@@ -642,12 +667,16 @@ RtmpNode* creatRtmpNode(Int32 fd, Director* director) {
     
     initRtmp(&_this->m_rtmp);
     
+    _this->m_pub.m_base.m_node_type = ENUM_NODE_RTMP;
     _this->m_rtmp.m_fd = fd;
     _this->m_rtmp.m_entity = &_this->m_pub;
     
     _this->m_director = director;
     _this->m_center = director->getCenter(); 
     _this->m_handler = _this->m_center->getRtmpHandler();
+
+    director->condition(&_this->m_pub.m_base.m_rcv_task, BIT_EVENT_READ);
+    director->condition(&_this->m_pub.m_base.m_snd_task, BIT_EVENT_WRITE);
     
     _this->m_pub.m_base.getFd = _getFd;
     _this->m_pub.m_base.readNode = _readNode;

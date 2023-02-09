@@ -155,6 +155,8 @@ void test_service(const char* path) {
             g_conf.m_ip, g_conf.m_port);
         g_director->addListener(ENUM_LISTENER_SOCK, 
             g_conf.m_ip, g_conf.m_port + 1);  // just for test
+        g_director->addListener(ENUM_LISTENER_RTSP, 
+            g_conf.m_ip, g_conf.m_port + 2);  // for rtsp
         g_director->start();
         g_director->join();
     }

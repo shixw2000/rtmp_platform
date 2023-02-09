@@ -67,13 +67,8 @@ METHOD(NodeBase, destroy, Void, SockNodePriv* _this) {
 METHOD(SockNode, parsePkg, Int32, SockNodePriv* _this,
     Byte* data, Int32 len) {
     CacheHdr* hdr = NULL;
-    MsgSend* msg = NULL;
 
-    hdr = MsgCenter::creatMsg<MsgSend>(ENUM_MSG_TYPE_SEND, len);
-    msg = MsgCenter::body<MsgSend>(hdr);
-
-    memcpy(msg->m_head, data, len);
-    msg->m_hdr_size = len;
+    hdr = MsgCenter::creatSendMsg(data, len, NULL, 0, NULL);
     
     _this->m_director->send(&_this->m_pub.m_base, hdr);
     return ENUM_ERR_OK;
@@ -99,7 +94,7 @@ SockNode* creatSockNode(Int32 fd, Director* director) {
 
     ObjCenter::initNode(&_this->m_pub.m_base);
 
-    
+    _this->m_pub.m_base.m_node_type = ENUM_NODE_SOCKET;
     _this->m_sock_fd = fd;
     _this->m_director = director;
     _this->m_center = director->getCenter();

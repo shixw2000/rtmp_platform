@@ -11,8 +11,43 @@
 #include<regex.h>
 #include<stdarg.h>
 #include"misc.h"
-#include"globaltype.h"
 
+
+struct UsrTime {
+    Uint64 m_sec:54,
+        m_msec:10;
+};
+
+static UsrTime _getMonoTime(); 
+
+static const Char DEF_BUILD_VER[] = __BUILD_VER__;
+static const Int32 MAX_LOG_FILE_SIZE = 0x2000000;
+static const Int32 MAX_LOG_FILE_CNT = 3;
+static const Int32 MAX_LOG_NAME_SIZE = 32;
+static const Int32 MAX_LOG_CACHE_SIZE = 0x100000;
+static const Int32 MAX_CACHE_INDEX = 8;
+
+static const Char* DEF_LOG_DESC[MAX_LOG_LEVEL] = {
+    "ERROR", "WARN", "INFO", "DEBUG", "VERB" 
+};
+
+static const Char DEF_LOG_LINK_NAME[] = "agent.log";
+static const Char DEF_NULL_FILE[] = "/dev/null";
+static const Char DEF_LOG_NAME_PATTERN[] = "^agent_([[:digit:]]{3}).log$";
+
+
+struct SysParam {
+    FILE* m_log_hd;
+    Uint32 m_epoch; // time from 1970 in second
+    Uint32 m_diff_ts; // clock time differ from epoch
+    Int32 m_log_level;
+    Bool m_log_stdin;
+    Char m_log_buf[MAX_CACHE_INDEX][MAX_LOG_CACHE_SIZE];
+    Byte m_log_buf_index;
+    Byte m_cur_log_index;
+}; 
+
+static SysParam g_sys_param;
 
 int getTid() {
     int tid = 0;
@@ -66,69 +101,50 @@ void getRand(Void* buf, Int32 len) {
     }
     
     return;
-}
+} 
 
-Uint64 getSysTime() {
-    Uint64 tm = 0;
-    Int32 ret = 0;
-    struct timespec ts;
+Uint32 getSysTime() {
+    UsrTime usrTm = {0, 0};
 
-    ret = clock_gettime(CLOCK_REALTIME_COARSE, &ts);
-    if (0 == ret) {
-        mulTime(tm, ts.tv_sec, ts.tv_nsec / 1000000);
-    } 
+    usrTm = _getMonoTime();
+    
+    usrTm.m_sec += g_sys_param.m_diff_ts;
 
-    return tm;
-}
-
-Uint32 getMonoTime() {
-    Uint32 tm = 0;
-    Int32 ret = 0;
-    struct timespec ts;
-
-    ret = clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
-    if (0 == ret) {
-        tm = (Uint32)ts.tv_sec;
-    }
-
-    return tm;
+    return usrTm.m_sec;
 }
 
 Uint64 getMonoTimeMs() {
-    Uint64 ms = 0;
-    Int32 ret = 0;
-    struct timespec ts;
+    Uint64 ms = 0; 
+    UsrTime usrTm = {0, 0};
 
-    ret = clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
-    if (0 == ret) {
-        ms = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-    }
+    usrTm = _getMonoTime();
+    ms = usrTm.m_sec * 1000 + usrTm.m_msec;
 
     return ms;
 }
 
+Int32 formatTime(Uint32 ts, const Char* format, Bool bUtc, 
+    Char (&out)[DEF_TIME_FORMAT_SIZE]) {
+    Int32 len = 0;
+    time_t nTi = ts;
+    struct tm oTm;
+    struct tm* pTm = NULL;
 
-static const Char DEF_BUILD_VER[] = __BUILD_VER__;
-static const Int32 MAX_LOG_FILE_SIZE = 0x2000000;
-static const Int32 MAX_LOG_FILE_CNT = 3;
-static const Int32 MAX_LOG_NAME_SIZE = 32;
-static const Int32 MAX_LOG_CACHE_SIZE = 0x100000;
-static const Int32 MAX_CACHE_INDEX = 8;
-static Int32 g_log_level = 2;
-static Bool g_log_stdin = TRUE;
-static const Int32 MAX_LOG_LEVEL = 5;
-static const Char* DEF_LOG_DESC[MAX_LOG_LEVEL] = {
-    "ERROR", "WARN", "INFO", "DEBUG", "VERB" 
-};
+    if (bUtc) {
+        pTm = gmtime_r(&nTi, &oTm);
+    } else {
+        pTm = localtime_r(&nTi, &oTm);
+    }
 
-static FILE* g_log_hd = NULL;
-static Byte g_cur_log_index = 0;
-static const Char DEF_LOG_LINK_NAME[] = "agent.log";
-static const Char DEF_NULL_FILE[] = "/dev/null";
-static const Char DEF_LOG_NAME_PATTERN[] = "^agent_([[:digit:]]{3}).log$";
-static Char g_buf[MAX_CACHE_INDEX][MAX_LOG_CACHE_SIZE];
-static Byte g_buf_index = 0;
+    if (NULL != pTm) {
+        len = strftime(out, DEF_TIME_FORMAT_SIZE, format, pTm);
+    } else {
+        len = 0;
+    }
 
+    out[len] = '\0'; 
+    return len;
+}
 
 static Void findLogIndex() {
     Int32 ret = 0; 
@@ -136,9 +152,7 @@ static Void findLogIndex() {
     regex_t reg;
     regmatch_t matchs[2]; 
     Char szFile[MAX_LOG_NAME_SIZE] = {0};
-    
-    g_cur_log_index = 0;
-    
+        
     ret = readlink(DEF_LOG_LINK_NAME, szFile, MAX_LOG_NAME_SIZE-1);
     if (0 <= ret) {
         szFile[ret] = '\0';
@@ -150,7 +164,7 @@ static Void findLogIndex() {
         }
     } 
 
-    g_cur_log_index = index;
+    g_sys_param.m_cur_log_index = index;
 }
 
 static Void creatFileLog(const char mode[]) {
@@ -160,22 +174,22 @@ static Void creatFileLog(const char mode[]) {
     int index = 0;
     Char szFile[MAX_LOG_NAME_SIZE] = {0};
     
-    index = ATOMIC_FETCH_INC(&g_cur_log_index);
+    index = ATOMIC_FETCH_INC(&g_sys_param.m_cur_log_index);
     index %= MAX_LOG_FILE_CNT;
     snprintf(szFile, sizeof(szFile), "agent_%03d.log", index);
 
     psz = szFile;
-    if (NULL != g_log_hd) {
-        f = freopen(psz, mode, g_log_hd); 
+    if (NULL != g_sys_param.m_log_hd) {
+        f = freopen(psz, mode, g_sys_param.m_log_hd); 
         if (NULL == f) {
             psz = DEF_NULL_FILE;
-            freopen(psz, mode, g_log_hd); 
+            freopen(psz, mode, g_sys_param.m_log_hd); 
         }
     } else {
-        g_log_hd = fopen(psz, mode);
-        if (NULL == g_log_hd) {
+        g_sys_param.m_log_hd = fopen(psz, mode);
+        if (NULL == g_sys_param.m_log_hd) {
             psz = DEF_NULL_FILE;
-            g_log_hd = fopen(psz, mode);
+            g_sys_param.m_log_hd = fopen(psz, mode);
         }
     }
     
@@ -189,7 +203,7 @@ static Void statFileLog() {
     static Bool g_log_creating = FALSE;
     Int32 pos = 0; 
 
-    pos = (Int32)ftell(g_log_hd);
+    pos = (Int32)ftell(g_sys_param.m_log_hd);
     if (pos < MAX_LOG_FILE_SIZE || g_log_creating) {
         return;
     } else {
@@ -203,25 +217,28 @@ static Void statFileLog() {
 
 Void setLogLevel(Int32 level) {
     if (MAX_LOG_LEVEL > level && 0 <= level) {
-        g_log_level = level;
+        g_sys_param.m_log_level = level;
     } else {
-        g_log_level = 0;
+        g_sys_param.m_log_level = ENUM_LOG_INFO;
     }
 }
 
 Void setLogStdin(Bool yes) {
-    g_log_stdin = yes;
+    g_sys_param.m_log_stdin = yes;
 }
 
-Void initLog() {
+Void initLog() { 
+    g_sys_param.m_log_level = ENUM_LOG_INFO;
+    g_sys_param.m_log_stdin = TRUE;
+    
     findLogIndex();
     creatFileLog("ab"); 
 }
 
 Void finishLog() {
-    if (NULL != g_log_hd) {
-        fclose(g_log_hd);
-        g_log_hd = NULL;
+    if (NULL != g_sys_param.m_log_hd) {
+        fclose(g_sys_param.m_log_hd);
+        g_sys_param.m_log_hd = NULL;
     }
 } 
 
@@ -236,19 +253,19 @@ Void formatLog(int level, const char format[], ...) {
     va_list ap;
     Byte index = 0;
 
-    if (level > g_log_level || NULL == g_log_hd) {
+    if (level > g_sys_param.m_log_level || NULL == g_sys_param.m_log_hd) {
         return;
     }
     
-    t = (time_t)to_sec(getSysTime());
+    t = (time_t)getSysTime();
     size = 0;
     maxlen = MAX_LOG_CACHE_SIZE-1;    
     
     result = localtime_r(&t, &tm); 
     if (NULL != result) { 
-        index = ATOMIC_FETCH_INC(&g_buf_index); 
+        index = ATOMIC_FETCH_INC(&g_sys_param.m_log_buf_index); 
         index = index % MAX_CACHE_INDEX;
-        psz = g_buf[index];
+        psz = g_sys_param.m_log_buf[index];
         
         cnt = snprintf(&psz[size], maxlen, "[%s]", DEF_LOG_DESC[level]);
         maxlen -= cnt;
@@ -272,11 +289,11 @@ Void formatLog(int level, const char format[], ...) {
 
         psz[size++] = '\n';
 
-        fwrite(psz, 1, size, g_log_hd); 
+        fwrite(psz, 1, size, g_sys_param.m_log_hd); 
         
         statFileLog(); 
 
-        if (g_log_stdin) {
+        if (g_sys_param.m_log_stdin) {
             fwrite(psz, 1, size, stdout); 
         }
     }
@@ -284,16 +301,54 @@ Void formatLog(int level, const char format[], ...) {
     return;
 }
 
+static Void initTime() {
+    UsrTime usrTm = {0, 0};
 
-Void initLib() {
-    srand(time(NULL));
+    g_sys_param.m_epoch = (Uint32)time(NULL);
 
-    initLog();
+    usrTm = _getMonoTime(); 
+    
+    g_sys_param.m_diff_ts = g_sys_param.m_epoch - usrTm.m_sec; 
+}
+
+Void initLib() { 
+    memset(&g_sys_param, 0, sizeof(g_sys_param));
+    
+    initTime();
+    
+    srand(g_sys_param.m_epoch);
+
+    initLog(); 
 }
 
 Void finishLib() {
     LOG_INFO("prog_stop| version=%s| msg=exit now|", DEF_BUILD_VER);
     
     finishLog();
+}
+
+/* format = sec + milisec<16> */
+static UsrTime _getMonoTime() {
+    UsrTime usrTm = {0, 0};
+    Int32 ret = 0;
+    struct timespec ts;
+
+    ret = clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+    if (0 == ret) {
+        usrTm.m_sec = ts.tv_sec;
+        usrTm.m_msec = ts.tv_nsec / 1000000;
+    }
+
+    return usrTm;
+}
+
+Void sysPause() {
+    pause();
+}
+
+Uint32 sysRand() {
+    Uint32 n = rand();
+
+    return n;
 }
 

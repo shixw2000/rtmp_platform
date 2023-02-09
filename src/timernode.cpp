@@ -112,6 +112,7 @@ TimerNode* creatTimerNode(Director* director) {
 
     ObjCenter::initNode(&_this->m_pub.m_base);
 
+    _this->m_pub.m_base.m_node_type = ENUM_NODE_TIMER;
     _this->m_director = director;
     _this->m_timer_fd = fd;
 

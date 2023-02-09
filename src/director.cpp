@@ -215,12 +215,10 @@ void Director::procTaskEnd(struct Task* task) {
 
     node = list_entry(task, NodeBase, m_cmd_task);
 
-    LOG_INFO("proc_task_end| fd=%d| type=%d| msg=finished|",
-        node->getFd(node), node->m_node_type);
+    LOG_INFO("proc_task_end| fd=%d| msg=finished|",
+        node->getFd(node));
 
-    delQue(node);
-    
-    node->m_fd_status = ENUM_FD_CLOSED; 
+    delQue(node); 
 
     /* destroy the node */
     node->destroy(node);
@@ -430,12 +428,12 @@ Void Director::procRegistCmd(NodeBase* node, CacheHdr* hdr) {
     CacheCenter::free(hdr);
 }
 
-Void Director::procCloseCmd(NodeBase* node, CacheHdr* hdr) {
+Void Director::procUnregCmd(NodeBase* node, CacheHdr* hdr) {
     Int32 errcode = 0;
 
     errcode = (Int32)getExchVal(hdr);
     if (!node->m_reason) {
-        LOG_INFO("close_node| fd=%d| errcode=%d|",
+        LOG_INFO("unreg_node| fd=%d| errcode=%d|",
             node->getFd(node), errcode);
         
         node->m_reason = errcode;
@@ -444,7 +442,7 @@ Void Director::procCloseCmd(NodeBase* node, CacheHdr* hdr) {
         /* start to del from receiver */
         recvExch(ENUM_MSG_DEL_FD, (Int64)node);
     } else {
-        LOG_INFO("close_node| fd=%d| errcode=%d| last_err=%d|",
+        LOG_INFO("unreg_node| fd=%d| errcode=%d| last_err=%d|",
             node->getFd(node), errcode, node->m_reason); 
     }
 
@@ -455,22 +453,29 @@ Void Director::procStopCmd(NodeBase* node, CacheHdr* hdr) {
     Int32 status = 0;
 
     status = (Int32)getExchVal(hdr); 
-    if (ENUM_FD_STOP_RCV == status) {
-        node->m_fd_status = status; 
+    if (node->m_fd_status < status) {
+        if (ENUM_FD_STOP_RCV == status) { 
+            node->m_fd_status = ENUM_FD_STOP_RCV; 
 
-        /* stop from dealer */ 
-        dispatchExch(node, ENUM_MSG_TYPE_STOP, ENUM_FD_STOP_DEAL);
-    } else if (ENUM_FD_STOP_DEAL == status) { 
-        node->m_fd_status = status;
+            /* stop from dealer */ 
+            dispatchExch(node, ENUM_MSG_TYPE_STOP, ENUM_FD_STOP_DEAL);
+        
+        } else if (ENUM_FD_STOP_DEAL == status) { 
+            node->m_fd_status = ENUM_FD_STOP_DEAL;
 
-        /* del from sender */
-        sendExch(&m_ctrl_node->m_base, ENUM_MSG_DEL_FD, (Int64)node);
-    } else if (ENUM_FD_STOP_SND == status) {  
-        node->m_fd_status = status;
-        endTask(&node->m_cmd_task);
-    } else {
-        /* invalid */
-    } 
+            /* del from sender */
+            sendExch(&m_ctrl_node->m_base, ENUM_MSG_DEL_FD, (Int64)node);
+        } else if (ENUM_FD_STOP_SND == status) {  
+            node->m_fd_status = ENUM_FD_STOP_SND;
+
+            directExch(node, ENUM_MSG_TYPE_STOP, ENUM_FD_CLOSED);
+        } else {
+            node->m_fd_status = ENUM_FD_CLOSED; 
+            
+            /* stop all to destroy the node */
+            endTask(&node->m_cmd_task); 
+        } 
+    }
 
     CacheCenter::free(hdr);
 }
@@ -490,8 +495,8 @@ Void Director::dealSysMsg(NodeBase* node, CacheHdr* hdr) {
         procTimer(CTRL_TYPE_CMD, hdr); 
     } else if (ENUM_MSG_TYPE_STOP == type) {
         procStopCmd(node, hdr);
-    } else if (ENUM_MSG_TYPE_CLOSE == type) {
-        procCloseCmd(node, hdr);
+    } else if (ENUM_MSG_UNREG_TASK == type) {
+        procUnregCmd(node, hdr);
     } else if (ENUM_MSG_REGIST_TASK == type) {
         procRegistCmd(node, hdr);
     } else {
@@ -596,8 +601,8 @@ Void Director::delQue(NodeBase* node) {
     list_del(&node->m_cmd_node, &m_cmd_list);
 }
 
-Void Director::closeTask(NodeBase* node, Int32 errcode) {
-    directExch(node, ENUM_MSG_TYPE_CLOSE, errcode);
+Void Director::unregTask(NodeBase* node, Int32 errcode) {
+    directExch(node, ENUM_MSG_UNREG_TASK, errcode);
 }
 
 Void Director::registTask(NodeBase* node, Int32 ev) {
@@ -644,26 +649,19 @@ Int32 Director::addListener(EnumListenerType type,
         return -1;
     } 
 
-    switch (type) {
-    case ENUM_LISTENER_RTMP:
-        node = creatRtmpListener(fd, this);
-        break;
+    node = creatListener(type, fd, this);
+    if (NULL != node) { 
+        LOG_INFO("++++add_listener| type=%d| fd=%d| addr=%s:%d| msg=ok|",
+            type, fd, param.m_ip, param.m_port);
 
-    case ENUM_LISTENER_SOCK:
-        node = creatSockListener(fd, this);
-        break;
+        return 0;
+    } else {
+        LOG_ERROR("****add_listener| type=%d| fd=%d| addr=%s:%d|"
+            " msg=creat err|",
+            type, fd, param.m_ip, param.m_port);
 
-    default:
         closeHd(fd);
         return -1;
-        break;
-    } 
-    
-    registTask(&node->m_base, EVENT_TYPE_RD);
-
-    LOG_INFO("++++add_listener| type=%d| fd=%d| addr=%s:%d| msg=ok|",
-        type, fd, param.m_ip, param.m_port);
-
-    return 0;
+    }
 }
 

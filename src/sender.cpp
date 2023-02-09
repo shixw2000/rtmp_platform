@@ -94,7 +94,7 @@ Void Sender::closeTask(NodeBase* node, Int32 errcode) {
     node->m_can_wr = FALSE;
     
     delNode(node);
-    m_director->closeTask(node, errcode);
+    m_director->unregTask(node, errcode);
 }
 
 Int32 Sender::waitEvent(Int32 timeout) { 
@@ -120,6 +120,7 @@ Int32 Sender::waitEvent(Int32 timeout) {
             m_nodes[cnt] = node; 
             ++cnt; 
             
+            pfd->fd = node->getFd(node);
             pfd->events = POLLOUT; 
             pfd->revents = 0;
         } else {

@@ -4,6 +4,8 @@
 #include"payloads/outputstream.h"
 #include"payloads/inputstream.h"
 #include"payloads/invokepld.h"
+#include"rtp/rtspcenter.h"
+#include"sock/udputil.h"
 
 
 Void ObjCenter::initNode(NodeBase* node) {
@@ -64,6 +66,7 @@ ObjCenter::ObjCenter() {
     m_output = NULL;
     m_input = NULL;
     m_handler = NULL;
+    m_rtsp_handler = NULL;
 }
 
 ObjCenter::~ObjCenter() {
@@ -79,6 +82,11 @@ Int32 ObjCenter::init() {
     if (NULL == m_handler) {
         return -1;
     }
+
+    m_rtsp_handler = RtspHandler::creat();
+    if (NULL == m_rtsp_handler) {
+        return -1;
+    }
     
     return ret;
 }
@@ -90,6 +98,11 @@ Void ObjCenter::finish() {
     if (NULL != m_handler) {
         RtmpHandler::free(m_handler);
         m_handler = NULL;
+    }
+
+    if (NULL != m_rtsp_handler) {
+        RtspHandler::freeHd(m_rtsp_handler);
+        m_rtsp_handler = NULL;
     }
 }
 
@@ -108,6 +121,10 @@ EnumSockRet ObjCenter::readSock(NodeBase* node, callback cb) {
                 return ENUM_SOCK_MARK_PARTIAL;
             }
         } else {
+            LOG_ERROR("read_sock| ret=%d| fd=%d| rdlen=%d|"
+                " msg=parse read error|",
+                ret, fd, rdlen);
+            
             return ENUM_SOCK_MARK_ERR;
         }
     } else if (0 == rdlen) {
@@ -132,4 +149,32 @@ Int32 ObjCenter::parseRtmp(Rtmp* rtmp, Byte* data, Int32 len) {
     return ret;
 }
 
+EnumSockRet ObjCenter::readUdp(NodeBase* node, callback2 cb) {
+    Int32 ret = 0;
+    int rdlen = 0;
+    Int32 fd = node->getFd(node); 
+    AddrInfo addr;
+
+    rdlen = UdpUtil::recvFrom(fd, m_buf, DEF_TCP_RCV_BUF_SIZE, &addr);
+    if (0 < rdlen) { 
+        ret = cb(node, m_buf, rdlen, &addr);
+        if (0 == ret) {
+            if (rdlen < DEF_TCP_RCV_BUF_SIZE) {
+                return ENUM_SOCK_MARK_FINISH;
+            } else {
+                return ENUM_SOCK_MARK_PARTIAL;
+            }
+        } else {
+            LOG_ERROR("read_udp| ret=%d| fd=%d| rdlen=%d|"
+                " msg=parse read error|",
+                ret, fd, rdlen);
+            
+            return ENUM_SOCK_MARK_ERR;
+        }
+    } else if (0 == rdlen) {
+        return ENUM_SOCK_MARK_FINISH;
+    } else {
+        return ENUM_SOCK_MARK_ERR;
+    }
+}
 

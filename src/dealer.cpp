@@ -43,7 +43,7 @@ Void Dealer::closeTask(NodeBase* node, Int32 errcode) {
     if (!node->m_stop_deal) {
         node->m_stop_deal = TRUE;
         
-        m_director->closeTask(node, errcode);
+        m_director->unregTask(node, errcode);
     }
 }
 
@@ -62,8 +62,8 @@ void Dealer::procTaskEnd(struct Task* task) {
 
     node = list_entry(task, NodeBase, m_deal_task);
 
-    LOG_INFO("proc_task_end| fd=%d| type=%d| name=dealer|",
-        node->getFd(node), node->m_node_type);
+    LOG_INFO("proc_task_end| fd=%d| name=dealer|",
+        node->getFd(node));
 
     m_director->directExch(node, ENUM_MSG_TYPE_STOP, ENUM_FD_STOP_DEAL);
     

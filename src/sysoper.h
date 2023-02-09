@@ -25,6 +25,11 @@ enum BOOL_VAL {
 #define NULL 0
 #endif
 
+
+#ifndef __LITTLE_ENDIAN
+#define __LITTLE_ENDIAN
+#endif
+
 #define ACCESS_ONCE(x) (*(volatile typeof(x) *)&(x))
 #define CAS(ptr,test,val) __sync_bool_compare_and_swap((ptr), (test), (val))
 #define CMPXCHG(ptr,test,val) __sync_val_compare_and_swap((ptr), (test), (val)) 
@@ -39,21 +44,13 @@ enum BOOL_VAL {
 	const typeof(((type *)0)->member)* __mptr = (ptr);	\
 	(type *)((char*)__mptr - offset_of(type, member)); })
 
-#define BUILD_ASSERT(x) (sizeof(char[(x) ? 0 : -1]))
-#define BUILD_ASSERT_ARRAY(a) \
-		BUILD_ASSERT(!__builtin_types_compatible_p(typeof(a), typeof(&(a)[0])))
-#define count_of(arr) (sizeof(arr)/sizeof((arr)[0]) \
-    + BUILD_ASSERT_ARRAY(arr))
+#define count_of(arr) (sizeof(arr)/sizeof((arr)[0]))
 
 #define I_FREE(x) do { if (NULL != (x)) {delete (x); (x)=NULL;} } while (0)
 #define I_NEW(type, x)  ((x) = new type)
 #define I_NEW_P(type, x, v1, ...)  ((x) = new type(v1, ##__VA_ARGS__))
 #define ARR_FREE(x) do { if (NULL != (x)) {delete[] (x); (x)=NULL;} } while (0)
 #define ARR_NEW(type,size, x) ((x) = new type[size])
-
-#define mulTime(tm,sec,msec) ({(tm) = ((sec) << 16) + ((msec)&0XFFFF);})
-#define to_sec(tm) ((tm)>>16)
-#define to_msec(tm) ((tm)&0XFFFF)
 
 #define ERR_MSG() strerror(errno)
 

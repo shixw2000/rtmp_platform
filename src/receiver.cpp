@@ -92,7 +92,7 @@ Void Receiver::delNode(NodeBase* node) {
 
 Void Receiver::closeTask(NodeBase* node, Int32 errcode) {       
     delNode(node);
-    m_director->closeTask(node, errcode);
+    m_director->unregTask(node, errcode);
 }
 
 Int32 Receiver::waitEvent(Int32 timeout) { 

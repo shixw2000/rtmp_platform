@@ -39,6 +39,11 @@ enum EnumNodeType {
     ENUM_NODE_LISTENER,
     ENUM_NODE_SOCKET,
 
+    ENUM_NODE_RTMP,
+    ENUM_NODE_RTSP,
+    ENUM_NODE_RTP,
+    ENUM_NODE_RTCP,
+
     ENUM_NODE_END
 };
 
@@ -51,6 +56,7 @@ enum EnumErrCode {
     ENUM_ERR_SOCK_DATA_RD,
     ENUM_ERR_SOCK_DATA_WR,
     ENUM_ERR_SOCK_DATA_DEAL,
+    ENUM_ERR_SOCK_PARENT_STOP,
 
     ENUM_ERR_ALLOC_CACHE,
 };
@@ -135,8 +141,8 @@ struct NodeBase {
     struct Task m_deal_task;
     struct Task m_cmd_task;
 
-    Int32 m_node_type;
     Int32 m_fd_status;
+    Int32 m_node_type;
     Int32 m_reason;
     Bool m_can_rd;
     Bool m_can_wr;
