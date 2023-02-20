@@ -363,6 +363,20 @@ Int32 Director::dispatchExch(NodeBase* node, Int32 cmd, Int64 val) {
     return ret;
 }
 
+Int32 Director::notifyExit(NodeBase* node) {
+    Int32 ret = 0;
+
+    ret = dispatchExch(node, ENUM_MSG_PARENT_ALLOW_EXIT, 0);
+    return ret;
+}
+
+Int32 Director::signalChildExit(NodeBase* parent, NodeBase* child) {
+    Int32 ret = 0;
+
+    ret = dispatchExch(parent, ENUM_MSG_CHILD_EXIT, (Int64)child);
+    return ret;
+}
+
 Int32 Director::directExch(NodeBase* node, Int32 cmd, Int64 val) {
     Int32 ret = 0;
     CacheHdr* hdr = NULL;

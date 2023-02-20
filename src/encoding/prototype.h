@@ -16,6 +16,7 @@ enum EnumEncType {
     U_INT_16,
     U_INT_24,
     U_INT_32,
+    CHUNK,
     CHUNK_8, 
 
     ENUM_ENC_END
@@ -25,11 +26,6 @@ enum EnumEncType {
 struct EncodingRule {
     Int32 m_enc_type;
     Int32 m_offset;
-};
-
-struct AVal {
-    Byte* m_data;
-    Int32 m_size;
 };
 
 #endif

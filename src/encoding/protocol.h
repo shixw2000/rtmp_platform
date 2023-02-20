@@ -11,6 +11,8 @@ protected:
 public:
     Void reset(Void* data, Int32 size);
     
+    Int32 parseChunk(Int32 ruleNum, Int32 length, AVal* chunk);
+    
     Int32 parseChunk_8(Int32 ruleNum, AVal* chunk);
 
     Int32 parseRule(Int32 ruleNum, Int32 enc_type, Void* obj);

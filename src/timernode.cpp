@@ -65,7 +65,8 @@ METHOD(NodeBase, writeNode, EnumSockRet, TimerNodePriv* _this) {
     return ENUM_SOCK_MARK_FINISH;
 }
 
-METHOD(NodeBase, onClose, Void, TimerNodePriv* ) {
+METHOD(NodeBase, onClose, Void, TimerNodePriv* _this) {
+    _this->m_director->notifyExit(&_this->m_pub.m_base);
 }
 
 METHOD(NodeBase, destroy, Void, TimerNodePriv* _this) {
@@ -109,10 +110,11 @@ TimerNode* creatTimerNode(Director* director) {
     }
 
     I_NEW(TimerNodePriv, _this);
+    
+    memset(_this, 0, sizeof(*_this));
+    
+    ObjCenter::initNode(&_this->m_pub.m_base, ENUM_NODE_TIMER);
 
-    ObjCenter::initNode(&_this->m_pub.m_base);
-
-    _this->m_pub.m_base.m_node_type = ENUM_NODE_TIMER;
     _this->m_director = director;
     _this->m_timer_fd = fd;
 

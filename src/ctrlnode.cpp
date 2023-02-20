@@ -64,7 +64,8 @@ METHOD(NodeBase, writeNode, EnumSockRet, CtrlNodePriv* _this) {
     return ENUM_SOCK_MARK_FINISH;
 }
 
-METHOD(NodeBase, onClose, Void, CtrlNodePriv* ) {
+METHOD(NodeBase, onClose, Void, CtrlNodePriv* _this) {
+    _this->m_director->notifyExit(&_this->m_pub.m_base);
 }
 
 METHOD(NodeBase, destroy, Void, CtrlNodePriv* _this) {
@@ -86,9 +87,9 @@ CtrlNode* creatCtrlNode(Director* director) {
 
     I_NEW(CtrlNodePriv, _this);
 
-    ObjCenter::initNode(&_this->m_pub.m_base);
-
-    _this->m_pub.m_base.m_node_type = ENUM_NODE_CTRL;
+    memset(_this, 0, sizeof(*_this));
+    
+    ObjCenter::initNode(&_this->m_pub.m_base, ENUM_NODE_CTRL);
     
     INIT_LIST_HEAD(&_this->m_rcv_que_tmp);
     INIT_LIST_HEAD(&_this->m_rcv_que);

@@ -28,6 +28,8 @@ struct MsgComm {
 
 enum EnumMsgType {
     ENUM_MSG_TYPE_STOP,
+    ENUM_MSG_CHILD_EXIT,
+    ENUM_MSG_PARENT_ALLOW_EXIT,
     ENUM_MSG_ADD_FD,
     ENUM_MSG_DEL_FD,
     ENUM_MSG_REGIST_TASK,

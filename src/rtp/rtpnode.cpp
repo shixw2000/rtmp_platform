@@ -19,24 +19,9 @@ struct RtpNodePriv {
     Director* m_director;
     ObjCenter* m_center;
     RtspHandler* m_handler;
-    RtspNode* m_parent;
-
-    Rtp m_rtp;
+    NodeBase* m_parent;
+    Int32 m_fd;
 };
-
-static Void initRtp(Rtp* rtp) {
-    rtp->m_fd = -1;
-}
-
-static Void finishRtp(RtspHandler* handler, Rtp* rtp) {
-    
-    if (0 <= rtp->m_fd) {
-        CommSock::closeHd(rtp->m_fd);
-        rtp->m_fd = -1;
-
-        handler->setPortPairMap(rtp->m_my_ip.m_port, FALSE);
-    } 
-}
 
 static Int32 parse(NodeBase* node, Byte* data, Int32 len, 
     const AddrInfo* addr) {
@@ -55,7 +40,7 @@ static Int32 parse(NodeBase* node, Byte* data, Int32 len,
 }
 
 METHOD(NodeBase, getFd, Int32, RtpNodePriv* _this) {
-    return _this->m_rtp.m_fd;
+    return _this->m_fd;
 }
 
 METHOD(NodeBase, readNode, EnumSockRet, RtpNodePriv* _this) {
@@ -104,10 +89,14 @@ METHOD(NodeBase, dealCmd, Void, RtpNodePriv* , CacheHdr* ) {
 }
 
 METHOD(NodeBase, onClose, Void, RtpNodePriv* _this) {
+    _this->m_director->signalChildExit(_this->m_parent, &_this->m_pub.m_base); 
 }
 
 METHOD(NodeBase, destroy, Void, RtpNodePriv* _this) { 
-    finishRtp(_this->m_handler, &_this->m_rtp);
+    if (0 <= _this->m_fd) {
+        CommSock::closeHd(_this->m_fd);
+        _this->m_fd = -1; 
+    } 
     
     ObjCenter::finishNode(&_this->m_pub.m_base); 
     
@@ -121,25 +110,21 @@ METHOD(RtpNode, recv, Int32, RtpNodePriv* _this, CacheHdr* hdr) {
     return ret;
 }
 
-RtpNode* creatRtpNode(Int32 fd, RtspNode* parent, Director* director) {
+RtpNode* creatRtpNode(Int32 fd, Int32 node_type, 
+    NodeBase* parent, Director* director) {
     RtpNodePriv* _this = NULL;
 
     I_NEW(RtpNodePriv, _this);
     CacheCenter::zero(_this, sizeof(RtpNodePriv));
 
-    ObjCenter::initNode(&_this->m_pub.m_base); 
-    
-    initRtp(&_this->m_rtp);
-    
-    _this->m_rtp.m_fd = fd;
-    _this->m_rtp.m_entity = &_this->m_pub; 
-    
-    CommSock::getLocalInfo(fd, &_this->m_rtp.m_my_ip, NULL);
-    
+    ObjCenter::initNode(&_this->m_pub.m_base, node_type); 
+        
+    _this->m_fd = fd;
+        
+    _this->m_parent = parent;
     _this->m_director = director;
     _this->m_center = director->getCenter(); 
     _this->m_handler = _this->m_center->getRtspHandler();
-    _this->m_parent = parent;
 
     director->condition(&_this->m_pub.m_base.m_rcv_task, BIT_EVENT_READ);
     director->condition(&_this->m_pub.m_base.m_snd_task, BIT_EVENT_WRITE);
@@ -158,8 +143,5 @@ RtpNode* creatRtpNode(Int32 fd, RtspNode* parent, Director* director) {
   
     return &_this->m_pub;
 }
-
-
-
 
 

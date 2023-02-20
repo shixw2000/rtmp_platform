@@ -7,6 +7,8 @@
 #include"datatype.h"
 #include"director.h"
 #include"config.h"
+#include"rtp/httpdec.h"
+#include"tokenutil.h"
 
 
 static const Int32 MAX_FILENAME_PATH_SIZE = 256;
@@ -175,6 +177,71 @@ void usage(int, char* argv[]) {
         argv[0]);
 }
 
+Void test_http() {
+    Int32 port = 0;
+    Char buf[1024] = {0};
+    Token orig = DEF_EMPTY_TOKEN;
+    Token t[10];
+    
+    LOG_INFO("Enter a uri:");
+    fgets(buf, sizeof(buf), stdin);
+
+    memset(t, 0, sizeof(t));
+    
+    TokenUtil::setToken(&orig, buf);
+    HttpTool::splitUri(&orig, t, t+1, t+2, &port, t+3);
+
+    LOG_INFO("uri=%s| schema=%.*s| auth=%.*s| ip=%.*s|"
+        " port=%d| path=%.*s|",
+        buf,
+        t[0].m_size, t[0].m_token,
+        t[1].m_size, t[1].m_token,
+        t[2].m_size, t[2].m_token, 
+        port,
+        t[3].m_size, t[3].m_token);
+}
+
+Void test_cmdLine() {
+    Int32 ret = 0;
+    Char buf[1024] = {0};
+    Token t = DEF_EMPTY_TOKEN;
+    RtspCtx ctx;
+    
+    LOG_INFO("Enter a cmd:");
+    fgets(buf, sizeof(buf), stdin);
+    
+    TokenUtil::setToken(&t, buf);
+
+    memset(&ctx, 0, sizeof(ctx));
+    ret = HttpTool::parseCmdLine(&t, &ctx);
+    if (0 != ret) {
+    }
+
+    HttpTool::toStr(&ctx, &t);
+    LOG_INFO("%s", t.m_token);
+}
+
+Void test_hdrLine() {
+    Int32 ret = 0;
+    Char buf[1024] = {0};
+    Token t = DEF_EMPTY_TOKEN;
+    RtspCtx ctx;
+    
+    LOG_INFO("Enter a cmd:");
+    fgets(buf, sizeof(buf), stdin);
+    
+    TokenUtil::setToken(&t, buf);
+
+    memset(&ctx, 0, sizeof(ctx));
+    ret = HttpTool::parseHdrLine(&t, &ctx);
+    if (0 != ret) {
+    }
+
+    HttpTool::toStr(&ctx, &t);
+    LOG_INFO("%s", t.m_token);
+}
+
+
 int test_main(int argc, char* argv[]) {
     int opt = 0;
     const char* path = NULL;
@@ -200,6 +267,12 @@ int test_main(int argc, char* argv[]) {
         test_service(path);
     } else if (1 == opt) {
         test_offset();
+    } else if (2 == opt) {
+        test_http();
+    } else if (3 == opt) {
+        test_cmdLine();
+    } else if (4 == opt) {
+        test_hdrLine();
     } else {
         usage(argc, argv);
     }

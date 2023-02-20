@@ -122,6 +122,8 @@ struct NodeBase {
     Void (*dealCmd)(struct NodeBase* _this, CacheHdr* hdr); 
     
     Void (*onClose)(struct NodeBase* _this);
+    Void (*onChildExit)(struct NodeBase* _this, struct NodeBase* child);
+    
 
     Void (*destroy)(struct NodeBase* _this);
   

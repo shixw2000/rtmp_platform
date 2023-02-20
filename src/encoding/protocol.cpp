@@ -83,18 +83,7 @@ Void ProtoDecoder::reset(Void* data, Int32 size) {
     m_bit_pos = 0;
 }
 
-Int32 ProtoDecoder::parseChunk_8(Int32 ruleNum, AVal* chunk) {
-    Int32 ret = 0;
-    Uint32 u32 = 0;
-    Int32 length = 0;
-
-    ret = parseByte<1>(ruleNum, &u32);
-    if (0 == ret) {
-        length = u32;
-    } else {
-        return ret;
-    }
-    
+Int32 ProtoDecoder::parseChunk(Int32 ruleNum, Int32 length, AVal* chunk) {    
     if (m_upto + length <= m_size && 0 == m_bit_pos) {
         if (NULL != chunk) {
             chunk->m_size = length;
@@ -110,6 +99,29 @@ Int32 ProtoDecoder::parseChunk_8(Int32 ruleNum, AVal* chunk) {
         
         return -1;
     } 
+}
+
+Int32 ProtoDecoder::parseChunk_8(Int32 ruleNum, AVal* chunk) {
+    Int32 ret = 0;
+    Int32 length = 0;
+
+    do {
+        ret = parseRule(ruleNum, U_INT_8, &length);
+        if (0 != ret) {
+            break;
+        }
+
+        ret = parseChunk(ruleNum, length, chunk);
+        if (0 != ret) {
+            break;
+        }
+    } while (0);
+
+    LOG_ERROR("parse_chunk_8| rule_num=%d| upto=%d| size=%d| bit_pos=%d|"
+        " length=%d| msg=invalid param|",
+        ruleNum, m_upto, m_size, m_bit_pos, length);
+    
+    return ret;
 }
 
 Int32 ProtoDecoder::parseRule(Int32 ruleNum, Int32 enc_type, Void* obj) {
@@ -155,6 +167,10 @@ Int32 ProtoDecoder::parseRule(Int32 ruleNum, Int32 enc_type, Void* obj) {
 
     case U_INT_32:
         ret = parseByte<4>(ruleNum, (Uint32*)pb);
+        break;
+
+    case CHUNK:
+        ret = parseChunk_8(ruleNum, (AVal*)pb);
         break;
         
     case CHUNK_8:

@@ -97,14 +97,6 @@ struct RtcpApp {
     Byte m_data[0];
 };
 
-struct RtpNode;
-
-struct Rtp {
-    RtpNode* m_entity;
-    Int32 m_fd;
-    IpInfo m_my_ip;
-};
-
 struct RtpPkg {
     AddrInfo m_origin;
     Int32 m_length;

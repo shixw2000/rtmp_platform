@@ -13,7 +13,7 @@ const RtspDec::PFunc RtspDec::m_funcs[ENUM_RTSP_DEC_END] = {
 
 Int32 RtspDec::parseMsg(Rtsp* rtsp, Byte* data, Int32 len) {
     Int32 ret = 0;
-    AVal chunk = RTSP_EMPTY_AVAL;
+    AVal chunk = DEF_EMPTY_AVAL;
 
     chunk.m_data = data;
     chunk.m_size = len;

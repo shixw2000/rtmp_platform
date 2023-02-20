@@ -1,9 +1,8 @@
 #ifndef __STREAMCENTER_H__
 #define __STREAMCENTER_H__
-#include<map>
-#include<string>
 #include"globaltype.h"
 #include"datatype.h"
+#include"stdtype.h"
 
 
 struct RtmpNode;
@@ -16,11 +15,6 @@ static const Byte CODEC_VIDEO_KEY_FRAME = 0x1;
 static const Byte CODEC_VIDEO_AVC_H264 = 0x17;
 static const Byte CODEC_VIDEO_AVC_SEQ = 0x0;
 
-typedef std::string typeString; 
-typedef std::map<Uint32, RtmpUint*> typeMapUnit;
-typedef typeMapUnit::iterator typeMapUnitItr;
-typedef typeMapUnit::const_iterator typeMapUnitItrConst;
-
 enum EnumAvcType { 
     ENUM_AVC_AUDIO,
     ENUM_AVC_VEDIO,
@@ -28,11 +22,6 @@ enum EnumAvcType {
 
     ENUM_AVC_END
 };
- 
-
-typedef std::map<typeString, RtmpStream*> typeMapStream;
-typedef typeMapStream::iterator typeMapStreamItr;
-typedef typeMapStream::const_iterator typeMapStreamItrConst;
 
 class RtmpHandler;
 

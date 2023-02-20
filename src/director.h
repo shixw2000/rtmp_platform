@@ -75,6 +75,12 @@ public:
     Void unregTask(NodeBase* node, Int32 errcode);
 
     Int32 addListener(EnumListenerType type, const Char szip[], Int32 port);
+
+    Int64 getExchVal(CacheHdr* hdr);
+
+    Int32 notifyExit(NodeBase* node);
+
+    Int32 signalChildExit(NodeBase* parent, NodeBase* child);
     
 protected:
     virtual int setup();
@@ -100,8 +106,7 @@ private:
     Int32 sendExch(NodeBase* node, Int32 cmd, Int64 val);
     
     CacheHdr* genExchMsg(Int32 cmd, Int64 val);
-    Int64 getExchVal(CacheHdr* hdr);
-
+  
     Void addQue(NodeBase* node);
     Void delQue(NodeBase* node);
     Void freeNodes();

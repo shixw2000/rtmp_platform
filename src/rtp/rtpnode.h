@@ -4,8 +4,6 @@
 
 
 struct CacheHdr;
-struct RtspNode;
-struct IpInfo;
 class Director;
 
 struct RtpNode {
@@ -14,18 +12,8 @@ struct RtpNode {
     Int32 (*recv)(RtpNode* _this, CacheHdr* hdr);
 };
 
-RtpNode* creatRtpNode(Int32 fd, RtspNode* parent,
-    Director* director); 
-
-
-struct RtcpNode {
-    NodeBase m_base;
-
-    Int32 (*recv)(RtcpNode* _this, CacheHdr* hdr);
-};
-
-RtcpNode* creatRtcpNode(Int32 fd, RtspNode* parent,
-    Director* director); 
+RtpNode* creatRtpNode(Int32 fd, Int32 node_type, NodeBase* parent, 
+    Director* director);
 
 #endif
 

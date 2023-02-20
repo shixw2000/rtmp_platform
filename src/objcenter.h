@@ -31,7 +31,7 @@ public:
     Int32 init();
     Void finish();
     
-    static Void initNode(NodeBase* node);
+    static Void initNode(NodeBase* node, Int32 node_type);
     static Void finishNode(NodeBase* node);
     static Void freeMsgQue(list_head* list);
 

@@ -8,9 +8,11 @@
 #include"sock/udputil.h"
 
 
-Void ObjCenter::initNode(NodeBase* node) {
+Void ObjCenter::initNode(NodeBase* node, Int32 node_type) {
     memset(node, 0, sizeof(NodeBase));
 
+    node->m_node_type = node_type;
+    
     INIT_LIST_NODE(&node->m_rcv_node);
     INIT_LIST_NODE(&node->m_snd_node);
     INIT_LIST_NODE(&node->m_cmd_node);
@@ -25,7 +27,7 @@ Void ObjCenter::initNode(NodeBase* node) {
     INIT_TASK(&node->m_rcv_task);
     INIT_TASK(&node->m_snd_task);
     INIT_TASK(&node->m_deal_task);
-    INIT_TASK(&node->m_cmd_task);
+    INIT_TASK(&node->m_cmd_task); 
 }
 
 Void ObjCenter::finishNode(NodeBase* node) {

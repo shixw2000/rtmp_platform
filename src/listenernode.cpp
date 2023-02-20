@@ -115,10 +115,10 @@ ListenerNode* creatRtmpListener(Int32 fd, Director* director) {
     RtmpListenerPriv* _this = NULL;
 
     I_NEW(RtmpListenerPriv, _this);
+    memset(_this, 0, sizeof(*_this));
 
-    ObjCenter::initNode(&_this->m_pub.m_base);
+    ObjCenter::initNode(&_this->m_pub.m_base, ENUM_NODE_LISTENER);
 
-    _this->m_pub.m_base.m_node_type = ENUM_NODE_LISTENER;
     _this->m_director = director;
     _this->m_listener_fd = fd;
 
@@ -163,10 +163,10 @@ ListenerNode* creatSockListener(Int32 fd, Director* director) {
     SockListenerPriv* _this = NULL;
 
     I_NEW(SockListenerPriv, _this);
+    memset(_this, 0, sizeof(*_this));
 
-    ObjCenter::initNode(&_this->m_pub.m_base);
+    ObjCenter::initNode(&_this->m_pub.m_base, ENUM_NODE_LISTENER);
 
-    _this->m_pub.m_base.m_node_type = ENUM_NODE_LISTENER;
     _this->m_director = director;
     _this->m_listener_fd = fd;
 

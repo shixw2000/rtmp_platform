@@ -4,7 +4,6 @@
 #include"cache.h"
 #include"sockutil.h"
 #include"objcenter.h"
-#include"msgtype.h"
 
 
 struct SockNodePriv {
@@ -53,7 +52,8 @@ METHOD(NodeBase, dealCmd, Void, SockNodePriv* , CacheHdr* ) {
     return;
 }
 
-METHOD(NodeBase, onClose, Void, SockNodePriv* ) {
+METHOD(NodeBase, onClose, Void, SockNodePriv* _this) {
+    _this->m_director->notifyExit(&_this->m_pub.m_base);
 }
 
 METHOD(NodeBase, destroy, Void, SockNodePriv* _this) {
@@ -92,9 +92,10 @@ SockNode* creatSockNode(Int32 fd, Director* director) {
 
     I_NEW(SockNodePriv, _this); 
 
-    ObjCenter::initNode(&_this->m_pub.m_base);
+    memset(_this, 0, sizeof(*_this));
+    
+    ObjCenter::initNode(&_this->m_pub.m_base, ENUM_NODE_SOCKET);
 
-    _this->m_pub.m_base.m_node_type = ENUM_NODE_SOCKET;
     _this->m_sock_fd = fd;
     _this->m_director = director;
     _this->m_center = director->getCenter();

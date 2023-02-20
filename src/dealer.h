@@ -31,6 +31,10 @@ private:
 
     Void procStopCmd(NodeBase* node, CacheHdr* hdr);
 
+    Void handleChildExit(NodeBase* node, CacheHdr* hdr);
+
+    Void handleParentAllowExit(NodeBase* node, CacheHdr* hdr);
+
 private:
     Director* m_director;
 };

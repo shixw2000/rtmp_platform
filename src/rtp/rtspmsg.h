@@ -6,7 +6,7 @@
 
 
 static const Int32 MIN_RTSP_TRANSPORT_PORT = 33330;
-static const Int32 MAX_RTSP_TRANSPORT_SIZE = 10000;
+static const Int32 MAX_RTSP_TRANSPORT_PORT = 40000;
 static const Int32 MAX_RTSP_BUFFER_SIZE = 0x10000;
 static const Int32 MAX_HTML_HEADER_SIZE = 0x400;
 static const Int32 MAX_HEADER_FIELDS_NUM = 16;
@@ -29,21 +29,6 @@ static const Char DEF_RTSP_RESP_PREFIX[] = "RTSP/1.";
 static const Int32 DEF_RTSP_RESP_PREFIX_SIZE = sizeof(DEF_RTSP_RESP_PREFIX)-1;
 static const Char PREFIX_CONTENT_LENGTH[] = "Content-Length: ";
 static const Int32 PREFIX_CONTENT_LENGTH_LEN = sizeof(PREFIX_CONTENT_LENGTH)-1;
-static const Char DEF_RTSP_RSP_CODE[] = "200";
-static const Char RTSP_RSP_SUCCESS_DETAIL[] = "OK";
-static const Char DEF_RTSP_RSP_NOT_SUPPORT_ERR[] = "404";
-static const Char DEF_RTSP_RSP_NOT_SUPPORT_DETAIL[] = "NOT SUPPORTED";
-
-static const Char FIELD_CONTENT_LENGTH[] = "Content-Length";
-static const Char DEF_RTSP_FIELD_CSEQ[] = "CSeq";
-static const Char DEF_RTSP_FIELD_PUBLIC[] = "Public";
-static const Char DEF_RTSP_FIELD_DATE[] = "Date";
-static const Char DEF_RTSP_FIELD_CONTENT_TYPE[] = "Content-Type";
-static const Char DEF_RTSP_FIELD_CONTENT_BASE[] = "Content-Base"; 
-static const Char DEF_RTSP_FIELD_TRANSPORT[] = "Transport";
-static const Char DEF_RTSP_FIELD_SESSION[] = "Session";
-
-static const Char DEF_RTSP_CLIENT_PORT_RANGE[] = "client_port";
 
 static const Char DEF_RTSP_FIELD_PUBLIC_VAL[] =
     "OPTIONS, DESCRIBE, ANNOUNCE, SETUP, TEARDOWN, PLAY, RECORD";
@@ -85,14 +70,6 @@ enum EnumRtspDecState {
     ENUM_RTSP_DEC_END
 }; 
 
-enum RTSP_HTML_TYPE {
-    ENUM_RTSP_HTML_NULL = 0,
-    ENUM_RTSP_HTML_REQ = 1,
-    ENUM_RTSP_HTML_RSP = 2,
-};
-
-
-static const AVal RTSP_EMPTY_AVAL = {NULL, 0};
 
 /* the length of span is (high - low), same as [low, high) */
 struct Span {
@@ -102,7 +79,9 @@ struct Span {
 
 struct CacheHdr;
 struct RtspNode;
+struct RtpNode;
 struct NodeBase;
+struct Session;
 
 struct RtspInput {
     Char* m_txt;   // used as temporary buffer
@@ -128,24 +107,23 @@ struct HtmlMsg {
     Int32 m_txt_cap;    // cap of txt 
 };
 
-static const Int32 MAX_RTSP_STREAM_NUM = 8;
-
 enum EnumRtspStreamType {
     ENUM_RTSP_STREAM_RTP = 0,
-    ENUM_RTSP_STREAM_RTCP,
+    ENUM_RTSP_STREAM_RTCP = 1,
     ENUM_RTSP_STREAM_END
 };
 
-struct RtspStreamUnit {
-    NodeBase* m_node;
-    Int32 m_unit_id;
-    IpInfo m_src_ip;
-    IpInfo m_dst_ip;
-}; 
+struct Rtp {
+    RtpNode* m_rtp_node;
+    RtpNode* m_rtcp_node;
+    Int32 m_port_base;
+    Char m_ip[MAX_IP_SIZE];
+};
 
 struct Rtsp {
     RtspNode* m_entity;
-    RtspStreamUnit m_streams[MAX_RTSP_STREAM_NUM];
+    Session* m_sess;
+    Rtp* m_rtp;
     RtspInput m_input; 
     Int32 m_fd;
     IpInfo m_my_ip;

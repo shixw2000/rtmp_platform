@@ -119,17 +119,37 @@ Void Dealer::procSysMsg(NodeBase* node, CacheHdr* hdr) {
         m_director->procTimer(CTRL_TYPE_DEAL, hdr);
     } else if (ENUM_MSG_TYPE_STOP == type) {
         procStopCmd(node, hdr);
+    } else if (ENUM_MSG_CHILD_EXIT == type) {
+        handleChildExit(node, hdr);
+    } else if (ENUM_MSG_PARENT_ALLOW_EXIT == type) {
+        handleParentAllowExit(node, hdr); 
     } else { 
         CacheCenter::free(hdr);
     }
 }
 
 Void Dealer::procStopCmd(NodeBase* node, CacheHdr* hdr) {   
+    
     if (!node->m_stop_deal) {
         node->m_stop_deal = TRUE;
     }
     
     node->onClose(node); 
+    
+    CacheCenter::free(hdr);
+}
+
+Void Dealer::handleChildExit(NodeBase* node, CacheHdr* hdr) {
+    NodeBase* child = NULL; 
+
+    child = (NodeBase*)m_director->getExchVal(hdr); 
+    
+    node->onChildExit(node, child); 
+    
+    CacheCenter::free(hdr);
+}
+
+Void Dealer::handleParentAllowExit(NodeBase* node, CacheHdr* hdr) {
     endTask(&node->m_deal_task); 
     
     CacheCenter::free(hdr);

@@ -10,6 +10,7 @@
 #include<stdlib.h>
 #include<regex.h>
 #include<stdarg.h>
+#include<ctype.h>
 #include"misc.h"
 
 

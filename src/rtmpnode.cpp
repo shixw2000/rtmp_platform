@@ -260,6 +260,8 @@ METHOD(NodeBase, dealCmd, Void, RtmpNodePriv* , CacheHdr* ) {
 
 METHOD(NodeBase, onClose, Void, RtmpNodePriv* _this) {
     _this->m_handler->closeRtmp(&_this->m_rtmp);
+    
+    _this->m_director->notifyExit(&_this->m_pub.m_base);
 }
 
 static Void finishRtmp(Rtmp* rtmp);
@@ -663,11 +665,10 @@ RtmpNode* creatRtmpNode(Int32 fd, Director* director) {
     I_NEW(RtmpNodePriv, _this);
     CacheCenter::zero(_this, sizeof(RtmpNodePriv));
 
-    ObjCenter::initNode(&_this->m_pub.m_base); 
+    ObjCenter::initNode(&_this->m_pub.m_base, ENUM_NODE_RTMP); 
     
     initRtmp(&_this->m_rtmp);
     
-    _this->m_pub.m_base.m_node_type = ENUM_NODE_RTMP;
     _this->m_rtmp.m_fd = fd;
     _this->m_rtmp.m_entity = &_this->m_pub;
     

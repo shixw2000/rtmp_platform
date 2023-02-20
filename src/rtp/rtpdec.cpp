@@ -183,7 +183,7 @@ Int32 RtpDecoder::parseRtcp(RtpPkg* pkg) {
     rule = RTCP_HEADER_RULE;
     rule_cnt = (Int32)count_of(RTCP_HEADER_RULE);
     ret = parseObj(rule_cnt, rule, &hdr);
-    if (0 == ret) {
+    if (0 == ret && DEF_RTP_VERSION == hdr.m_version) {
         LOG_INFO("parse_rtcp_hdr| version=%u| padding=%u|"
             " rc=%u| payload_type=%u| length=%u| total=%d|",
             hdr.m_version, hdr.m_padding,
@@ -225,6 +225,7 @@ Int32 RtpDecoder::parseRtcp(RtpPkg* pkg) {
 
 Int32 RtpDecoder::parseRtp(RtpPkg* pkg) {
     Int32 ret = 0;
+    Int32 extLen = 0;
     Int32 padded = 0;
     Int32 rule_cnt = 0;
     const EncodingRule* rule = NULL;
@@ -255,6 +256,24 @@ Int32 RtpDecoder::parseRtp(RtpPkg* pkg) {
                 break;
             }
         }
+        
+        if (hdr.m_ext) {
+            /* read the extensiion part */
+            ret = parseRule(0, U_INT_16, NULL);
+            if (0 != ret) {
+                break;
+            }
+            
+            ret = parseRule(0, U_INT_16, &extLen);
+            if (0 != ret) {
+                break;
+            }
+
+            ret = parseChunk(0, extLen, NULL);
+            if (0 != ret) {
+                break;
+            }
+        }
 
         pkg->m_payload_skip = m_upto;
 
@@ -275,10 +294,11 @@ Int32 RtpDecoder::parseRtp(RtpPkg* pkg) {
             /* has a partial msg */
         } 
 
-        LOG_DEBUG("parse_rtp| version=%u| padding=%u:%d| ext=%u|"
+        LOG_DEBUG("parse_rtp| version=%u| padding=%u:%d| ext=%u:%d|"
             " cc=%u| marker=%u| payload_type=%u|"
             " seq=%u| ts=%u| ssrc=%u| payload_skip=%d| total=%d|",
-            hdr.m_version, hdr.m_padding, padded, hdr.m_ext,
+            hdr.m_version, hdr.m_padding, padded, 
+            hdr.m_ext, extLen,
             hdr.m_cc, hdr.m_marker, hdr.m_pt,
             hdr.m_seq, hdr.m_ts, hdr.m_ssrc,
             pkg->m_payload_skip, pkg->m_length);
@@ -287,11 +307,12 @@ Int32 RtpDecoder::parseRtp(RtpPkg* pkg) {
     } while (0);
 
     LOG_ERROR("parse_rtp| ret=%d| rule_cnt=%d|"
-        " version=%u| padding=%u:%d| ext=%u|"
+        " version=%u| padding=%u:%d| ext=%u:%d|"
         " cc=%u| marker=%u| payload_type=%u|"
         " seq=%u| ts=%u| ssrc=%u| payload_skip=%d| total=%d| msg=error|",
         ret, rule_cnt,
-        hdr.m_version, hdr.m_padding, padded, hdr.m_ext,
+        hdr.m_version, hdr.m_padding, padded, 
+        hdr.m_ext, extLen,
         hdr.m_cc, hdr.m_marker, hdr.m_pt,
         hdr.m_seq, hdr.m_ts, hdr.m_ssrc,
         pkg->m_payload_skip, pkg->m_length);

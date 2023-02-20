@@ -54,12 +54,13 @@ Void CommSock::copyIP(const IpInfo* src, IpInfo* dst) {
     Int32 len = 0;
 
     len = strnlen(src->m_ip, MAX_IP_SIZE);
-    if (len >= MAX_IP_SIZE) {
-        len = MAX_IP_SIZE- 1;
-    }
+    if (len < MAX_IP_SIZE) {
+        strncpy(dst->m_ip, src->m_ip, len);
+        dst->m_ip[len] = DEF_NULL_CHAR;
+    } else {
+        dst->m_ip[0] = DEF_NULL_CHAR;
+    } 
     
-    strncpy(dst->m_ip, src->m_ip, len);
-    dst->m_ip[len] = '\0';
     dst->m_port = src->m_port;
 }
 
@@ -67,12 +68,24 @@ Void CommSock::assignIP(const Char* ip, Int32 port, IpInfo* dst) {
     Int32 len = 0;
 
     len = strnlen(ip, MAX_IP_SIZE);
-    if (len >= MAX_IP_SIZE) {
-        len = MAX_IP_SIZE- 1;
-    }
+    if (len < MAX_IP_SIZE) {
+        strncpy(dst->m_ip, ip, len);
+        dst->m_ip[len] = DEF_NULL_CHAR;
+    } else {
+        dst->m_ip[0] = DEF_NULL_CHAR;
+    } 
     
-    strncpy(dst->m_ip, ip, len);
-    dst->m_ip[len] = '\0';
+    dst->m_port = port;
+}
+
+Void CommSock::setIP(const Token* ip, Int32 port, IpInfo* dst) {
+    if (0 < ip->m_size && MAX_IP_SIZE > ip->m_size) {
+        strncpy(dst->m_ip, ip->m_token, ip->m_size);
+        dst->m_ip[ip->m_size] = DEF_NULL_CHAR;
+    } else {
+        dst->m_ip[0] = DEF_NULL_CHAR;
+    }
+
     dst->m_port = port;
 }
 
